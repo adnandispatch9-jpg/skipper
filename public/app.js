@@ -11,6 +11,8 @@ const state = {
   filter: 'live',
   project: null,
   activity: [],
+  usage: null,
+  usageDays: 14,
   activityFilter: 'all',
   activitySeen: 0,
   query: '',
@@ -68,6 +70,7 @@ const ICONS = {
   edit: 'M4 20h4L19 9l-4-4L4 16ZM13.5 6.5l4 4',
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
   send: 'M4 12 20 4l-6 16-3-7Z',
+  chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   close: 'M6 6l12 12M18 6 6 18',
   copy: 'M10 8h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2ZM16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2',
   bell: 'M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15ZM10 20a2 2 0 0 0 4 0',
@@ -138,6 +141,7 @@ async function load() {
   notifyChanges(data.sessions);
   state.sessions = data.sessions;
   state.activity = (await getJson('/api/activity?limit=150').catch(() => null))?.items ?? state.activity;
+  if (route().name === 'usage') state.usage = await getJson(`/api/usage?days=${state.usageDays}`).catch(() => state.usage);
   const id = route().id;
   if (id) {
     const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, { cache: 'no-store' });
@@ -318,6 +322,7 @@ function route() {
   if (match) return { name: 'session', id: match[1] };
   if (hash === '#/sessions') return { name: 'list' };
   if (hash === '#/activity') return { name: 'activity' };
+  if (hash === '#/usage') return { name: 'usage' };
   return { name: 'overview' };
 }
 
@@ -367,6 +372,7 @@ function renderRail() {
   $('#rail-nav').replaceChildren(
     tab('live', needs ? `Live · ${needs} need${needs === 1 ? 's' : ''} you` : 'Live', live.length, needs ? (live.some((s) => s.state === 'permission') ? 'permission' : 'waiting') : 'working'),
     tab('history', 'History', state.sessions.length - live.length, 'ended'),
+    h('a', { class: `rail-tab rail-link${route().name === 'usage' ? ' current' : ''}`, href: '#/usage' }, icon('chart'), h('span', {}, 'Usage')),
   );
 
   const projects = new Map();
@@ -572,6 +578,64 @@ function hooksTip() {
       h('code', {}, command),
       h('button', { class: 'icon-btn tiny', type: 'button', title: 'Copy command', 'aria-label': 'Copy command', dataset: { action: 'copy', text: command } }, icon('copy'))),
     h('button', { class: 'icon-btn tiny tip-close', type: 'button', title: 'Dismiss', 'aria-label': 'Dismiss tip', dataset: { action: 'dismiss-tip', tip: 'hooks' } }, icon('close')));
+}
+
+const USAGE_RANGES = [[1, 'Today'], [7, '7 days'], [14, '14 days'], [30, '30 days']];
+
+function renderUsage() {
+  renderPulse();
+  const u = state.usage;
+  const head = h('div', { class: 'page-head usage-head' },
+    h('div', {},
+      h('h1', {}, 'Usage'),
+      h('p', { class: 'lede' }, 'Tokens are counted from every response, including subagents. Dollar cost appears only where Claude Code recorded it.')),
+    h('div', { class: 'segmented usage-range', role: 'tablist', 'aria-label': 'Time range' },
+      USAGE_RANGES.map(([days, label]) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(state.usageDays === days), dataset: { usageDays: String(days) } }, label))));
+  if (!u) return h('div', { class: 'usage' }, head, h('p', { class: 'muted' }, 'Loading usage…'));
+  if (!u.totals.responses) return h('div', { class: 'usage' }, head, h('p', { class: 'muted' }, 'No responses in this range yet.'));
+
+  const t = u.totals;
+  const change = t.previousOutput ? Math.round(((t.output - t.previousOutput) / t.previousOutput) * 100) : null;
+  const tile = (label, value, note) => h('div', { class: 'stat usage-stat' }, h('div', { class: 'label' }, label), h('div', { class: 'num' }, value), note ? h('div', { class: 'stat-note' }, note) : null);
+
+  const scale = niceScale(Math.max(...u.perDay.map((d) => d.output)));
+  const dayLabel = (key, long) => new Date(`${key}T12:00:00`).toLocaleDateString(undefined, long ? { weekday: 'short', month: 'short', day: 'numeric' } : { day: 'numeric' });
+  const every = u.perDay.length > 16 ? 5 : 1;
+  const bars = u.perDay.map((d, i) => {
+    const top = Object.entries(d.byProject).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([name, v]) => `${name} ${Math.round((v / d.output) * 100)}%`).join(' · ');
+    const tip = `${dayLabel(d.day, true)}: ${formatTokens(d.output)} output tokens${top ? ` (${top})` : ''}`;
+    return h('div', { class: 'bar-col', tabindex: '0', role: 'img', 'aria-label': tip, dataset: { tip } },
+      h('i', { class: 'bar-fill', style: `height:${d.output ? Math.max(2, (d.output / scale.max) * 100) : 0}%` }),
+      h('span', { class: 'bar-label' }, i % every === 0 || i === u.perDay.length - 1 ? dayLabel(d.day) : ''));
+  });
+  const ranked = (title, rows) => h('section', { class: 'panel' },
+    h('div', { class: 'panel-head' }, h('h2', {}, title), h('span', { class: 'meta' }, 'output tokens')),
+    h('div', { class: 'ranked' }, rows.slice(0, 8).map((r) =>
+      h('div', { class: 'ranked-row' },
+        h('span', { class: 'ranked-name' }, r.name),
+        h('span', { class: 'ranked-track' }, h('i', { style: `width:${(r.output / rows[0].output) * 100}%` })),
+        h('span', { class: 'ranked-value mono' }, formatTokens(r.output))))));
+
+  return h('div', { class: 'usage' },
+    head,
+    h('div', { class: 'stats usage-stats' },
+      tile('Output tokens', formatTokens(t.output), change == null ? null : `${change >= 0 ? '+' : ''}${change}% vs previous ${u.days === 1 ? 'day' : `${u.days} days`}`),
+      tile('Input tokens', formatTokens(t.input), t.input ? `${Math.round((t.cacheRead / t.input) * 100)}% served from cache` : null),
+      tile('Subagents', t.output ? `${Math.round((t.subagentOutput / t.output) * 100)}%` : '0%', 'of output tokens'),
+      tile('Recorded cost', t.costSessions ? `$${t.recordedCost.toFixed(2)}` : '—', t.costSessions ? `from ${t.costSessions} session${t.costSessions === 1 ? '' : 's'}` : 'none recorded in this range')),
+    h('section', { class: 'panel chart-panel' },
+      h('div', { class: 'panel-head' }, h('h2', {}, 'Output tokens per day'), h('span', { class: 'meta', id: 'chart-readout', 'aria-live': 'polite' }, 'Hover a bar for details')),
+      h('div', { class: 'chart' },
+        h('div', { class: 'chart-axis' }, [...scale.ticks].reverse().map((v) => h('span', {}, formatTokens(v)))),
+        h('div', { class: 'chart-plot' },
+          h('div', { class: 'chart-grid' }, h('i', {}), h('i', {}), h('i', {})),
+          h('div', { class: 'chart-bars', style: `grid-template-columns:repeat(${u.perDay.length}, minmax(0, 1fr))` }, bars))),
+      h('table', { class: 'sr-only' },
+        h('caption', {}, 'Output tokens per day'),
+        h('tbody', {}, u.perDay.map((d) => h('tr', {}, h('th', {}, dayLabel(d.day, true)), h('td', {}, d.output)))))),
+    h('div', { class: 'usage-grid' }, ranked('By project', u.byProject), ranked('By model', u.byModel)),
+    h('p', { class: 'hint usage-note' }, 'Skipper does not estimate prices. Token counts are exact; costs come only from Claude Code’s own records.'),
+  );
 }
 
 function renderOverview() {
@@ -910,7 +974,7 @@ function render() {
   }
   state.renderPending = false;
   const keepScroll = main.dataset.view === (r.id || r.name) ? main.scrollTop : 0;
-  main.replaceChildren(r.name === 'session' ? renderDetail(state.detail) : r.name === 'activity' ? renderActivityPage() : renderOverview());
+  main.replaceChildren(r.name === 'session' ? renderDetail(state.detail) : r.name === 'activity' ? renderActivityPage() : r.name === 'usage' ? renderUsage() : renderOverview());
   if (r.name === 'list') renderPulse();
   main.dataset.view = r.id || r.name;
   main.scrollTop = keepScroll;
@@ -1095,6 +1159,13 @@ function focusComposer() {
 function wireActions() {
   const main = $('#main');
   main.addEventListener('click', (event) => {
+    const range = event.target.closest('[data-usage-days]');
+    if (range) {
+      state.usageDays = Number(range.dataset.usageDays);
+      store.set('skipper.usageDays', String(state.usageDays));
+      reload();
+      return;
+    }
     const chip = event.target.closest('[data-activity-filter]');
     if (chip) {
       state.activityFilter = chip.dataset.activityFilter;
@@ -1184,6 +1255,13 @@ function init() {
   });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(store.get('skipper.theme')));
   wireActions();
+  const readout = (event) => {
+    const bar = event.target.closest?.('.bar-col');
+    const out = document.getElementById('chart-readout');
+    if (bar && out) out.textContent = bar.dataset.tip;
+  };
+  $('#main').addEventListener('mouseover', readout);
+  $('#main').addEventListener('focusin', readout);
   $('#tabbar').addEventListener('click', (event) => {
     const tab = event.target.closest('[data-tab]');
     if (!tab || tab.dataset.tab === 'needs' || tab.dataset.tab === 'activity') return;
@@ -1234,6 +1312,7 @@ function init() {
   }, { once: true });
 
   state.filter = store.get('skipper.filter') === 'history' ? 'history' : 'live';
+  state.usageDays = [1, 7, 14, 30].includes(Number(store.get('skipper.usageDays'))) ? Number(store.get('skipper.usageDays')) : 14;
   state.activitySeen = Number(store.get('skipper.activitySeen')) || 0;
   if (!state.activitySeen) {
     // First visit: only the last hour counts as new, not the whole week.

@@ -89,3 +89,25 @@ function resumeCommand(session) {
   const quoted = /^[\w@%+=:,./~-]+$/.test(session.cwd) ? session.cwd : `'${session.cwd.replace(/'/g, `'\\''`)}'`;
   return `cd ${quoted} && ${resume}`;
 }
+
+// 1234 -> "1.2k", 1840000 -> "1.84M". Keeps three significant digits.
+function formatTokens(n) {
+  const v = Math.max(0, Number(n) || 0);
+  if (v < 1000) return String(Math.round(v));
+  const units = [['B', 1e9], ['M', 1e6], ['k', 1e3]];
+  for (const [unit, size] of units) {
+    if (v >= size) {
+      const x = v / size;
+      return `${x >= 100 ? Math.round(x) : x >= 10 ? x.toFixed(1).replace(/\.0$/, '') : x.toFixed(2).replace(/\.?0+$/, '')}${unit}`;
+    }
+  }
+  return String(v);
+}
+
+// A rounded axis maximum and three tick values for a bar chart.
+function niceScale(max) {
+  if (!(max > 0)) return { max: 1, ticks: [0, 0.5, 1] };
+  const exp = 10 ** Math.floor(Math.log10(max));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * exp).find((m) => m * 2 >= max) ?? 10 * exp;
+  return { max: step * 2, ticks: [0, step, step * 2] };
+}

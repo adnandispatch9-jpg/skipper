@@ -46,6 +46,7 @@ try {
     ['session-light', 1440, 900, 'light', `#/s/${id('Checkout flow redesign')}`],
     ['tasks-paper', 1440, 900, 'paper', `#/s/${id('Migrate docs to the new theme')}`],
     ['loop-midnight', 1440, 900, 'midnight', `#/s/${id('offline-sync-loop')}`],
+    ['usage-dark', 1440, 1000, 'dark', '#/usage'],
     ['mobile-overview', 390, 844, 'dark', '#/'],
     ['mobile-permission', 390, 844, 'light', `#/s/${id('Ship 4.2 to TestFlight')}`],
   ];

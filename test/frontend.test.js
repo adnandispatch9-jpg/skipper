@@ -14,7 +14,7 @@ test('app.js parses', () => {
 test('every locally named function that is called is defined', () => {
   const defined = new Set([...source.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => m[1]));
   for (const m of source.matchAll(/\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/g)) defined.add(m[1]);
-  const ours = /^(?:(?:render|queue|session|alert|toggle|sync|apply|focus|wire|run|notify|attention|composer|notes|plan|agents|workflows|loop|links|team)(?:[A-Z]\w*)?|panel|segments|metaItem|chime|confirmButton|load|reload|connect|route|matches|visibleSessions|progress|detailGrid|toast|api|ago|countdown|duration|plain|safeHref|toolName|tick|icon|h|setOffline|onHookAlert|hooksTip|formatAgo|formatCountdown|dayBucket|dayBucketAt|groupActivity|splitAsk|resumeCommand)$/;
+  const ours = /^(?:(?:render|queue|session|alert|toggle|sync|apply|focus|wire|run|notify|attention|composer|notes|plan|agents|workflows|loop|links|team)(?:[A-Z]\w*)?|panel|segments|metaItem|chime|confirmButton|load|reload|connect|route|matches|visibleSessions|progress|detailGrid|toast|api|ago|countdown|duration|plain|safeHref|toolName|tick|icon|h|setOffline|onHookAlert|hooksTip|formatAgo|formatCountdown|dayBucket|dayBucketAt|groupActivity|splitAsk|resumeCommand|formatTokens|niceScale)$/;
   const missing = new Set();
   for (const m of source.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g)) {
     const name = m[1];
@@ -32,7 +32,7 @@ test('index.html references only elements app.js expects', () => {
 
 const helpers = (() => {
   const context = {};
-  vm.runInNewContext(`${logic}\n;globalThis.out = { resumeCommand, formatAgo, formatCountdown, duration, safeHref, toolName, plain, splitAsk, dayBucketAt, groupActivity };`, context);
+  vm.runInNewContext(`${logic}\n;globalThis.out = { formatTokens, niceScale, resumeCommand, formatAgo, formatCountdown, duration, safeHref, toolName, plain, splitAsk, dayBucketAt, groupActivity };`, context);
   return context.out;
 })();
 
@@ -78,4 +78,20 @@ test('resume command cds into the project and quotes unusual paths', () => {
   assert.equal(helpers.resumeCommand({ id, cwd: "/Users/me/my app's" }), `cd '/Users/me/my app'\\''s' && claude --resume ${id}`);
   assert.equal(helpers.resumeCommand({ id, cwd: null }), `claude --resume ${id}`);
   assert.equal(helpers.resumeCommand(null), null);
+});
+
+test('token counts are formatted compactly', () => {
+  assert.equal(helpers.formatTokens(950), '950');
+  assert.equal(helpers.formatTokens(1234), '1.23k');
+  assert.equal(helpers.formatTokens(740000), '740k');
+  assert.equal(helpers.formatTokens(1_840_000), '1.84M');
+  assert.equal(helpers.formatTokens(35_400_000), '35.4M');
+  assert.equal(helpers.formatTokens(1_708_483_163), '1.71B');
+  assert.equal(helpers.formatTokens(2_000_000), '2M');
+});
+
+test('chart scale rounds up to a readable maximum', () => {
+  assert.deepEqual(JSON.parse(JSON.stringify(helpers.niceScale(740_000))), { max: 1_000_000, ticks: [0, 500_000, 1_000_000] });
+  assert.deepEqual(JSON.parse(JSON.stringify(helpers.niceScale(310))), { max: 400, ticks: [0, 200, 400] });
+  assert.equal(helpers.niceScale(0).max, 1);
 });
