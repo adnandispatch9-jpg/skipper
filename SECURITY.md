@@ -12,5 +12,5 @@ Please use [GitHub private vulnerability reporting](https://github.com/bilol-mak
 - Binding to any other address requires a random access token, exchanged for an `HttpOnly`, `SameSite=Strict` cookie.
 - Write requests need `X-Skipper: 1`, `Content-Type: application/json` and a same-origin `Origin`, and bodies are capped at 64 KB. `--read-only` disables writes entirely.
 - Session and task IDs are validated against strict patterns before they touch the filesystem. Static files come from a fixed allowlist.
-- Messages are passed to `claude` as an argument list after `--`, never through a shell.
+- Messages are passed to the Claude Code CLI as an argument list after `--`, never through a shell, and are limited to 5 per minute.
 - Strict Content-Security-Policy with no inline scripts or styles. No third-party requests.

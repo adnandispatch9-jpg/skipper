@@ -30,6 +30,8 @@ const SECURITY_HEADERS = {
 
 const WRITE_METHODS = new Set(['POST', 'PATCH', 'DELETE']);
 const MAX_BODY = 64 * 1024;
+const MAX_EVENT_CLIENTS = 64;
+export const MESSAGE_LIMIT = { count: 5, windowMs: 60_000 };
 
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1']);
 
@@ -123,6 +125,7 @@ export async function startServer({
   }, 25000);
 
   const notes = new Notes(skipperDir);
+  const messageTimes = [];
   const tasks = new Tasks(claudeDir, store);
 
   async function readBody(req) {
@@ -185,6 +188,7 @@ export async function startServer({
         return json(res, 200, { now: Date.now(), readOnly, session: { ...session, notes: await notes.list(session.id) } });
       }
       if (url.pathname === '/api/events') {
+        if (clients.size >= MAX_EVENT_CLIENTS) return json(res, 503, { error: 'Too many open dashboards' });
         res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
         res.write('event: hello\ndata: {}\n\n');
         clients.add(res);
@@ -208,7 +212,20 @@ export async function startServer({
 
     let result;
     if (kind === 'message' && method === 'POST' && itemId === undefined) {
-      result = await sendMessage({ session, message: body.message, claudeBin });
+      // Each message starts a process, so cap how often that can happen.
+      const t = Date.now();
+      while (messageTimes.length && t - messageTimes[0] > MESSAGE_LIMIT.windowMs) messageTimes.shift();
+      if (messageTimes.length >= MESSAGE_LIMIT.count) {
+        return send(res, 429, JSON.stringify({ error: 'Too many messages in a minute. Wait a moment and try again.' }), undefined, { 'Retry-After': '30' });
+      }
+      messageTimes.push(t);
+      try {
+        result = await sendMessage({ session, message: body.message, claudeBin });
+      } catch (error) {
+        // A rejected message (empty, too long) did not start anything; give the slot back.
+        if (error instanceof ActionError && error.status < 500) messageTimes.splice(messageTimes.indexOf(t), 1);
+        throw error;
+      }
       log(`message sent to ${session.id}`);
     } else if (kind === 'notes' && method === 'POST' && itemId === undefined) {
       result = await notes.add(session.id, body.text);

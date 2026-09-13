@@ -223,3 +223,20 @@ test('activity: only the newest finished turn of a session carries its message',
   assert.ok(turns[0].detail, 'newest has text');
   assert.equal(turns[1].detail, null, 'older has none');
 });
+
+test('message sends are rate limited', async () => {
+  const { MESSAGE_LIMIT } = await import('../src/server.js');
+  const demo = await startServer({ claudeDir: dir, dataDir: path.join(dir, '.skipper'), port: 0, claudeBin: null, log: () => {} });
+  try {
+    const url = `http://127.0.0.1:${demo.port}`;
+    const s = await sessionByTitle('Fix flaky webhook retries');
+    const statuses = [];
+    for (let i = 0; i < MESSAGE_LIMIT.count + 2; i++) {
+      statuses.push((await write(`${url}/api/sessions/${s.id}/message`, 'POST', { message: `hello ${i}` })).status);
+    }
+    assert.deepEqual(statuses.slice(0, MESSAGE_LIMIT.count), Array(MESSAGE_LIMIT.count).fill(200));
+    assert.deepEqual(statuses.slice(MESSAGE_LIMIT.count), [429, 429]);
+  } finally {
+    await demo.close();
+  }
+});
