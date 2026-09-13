@@ -1047,6 +1047,7 @@ function cycleTheme() {
   if (!next) return;
   store.set('skipper.theme', next);
   applyTheme(next);
+  toast(`Theme: ${THEMES.find(([id]) => id === next)[1]}`);
 }
 
 /* ---------- write actions ---------- */

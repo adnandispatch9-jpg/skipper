@@ -113,11 +113,12 @@ function niceScale(max) {
   return { max: step * 2, ticks: [0, step, step * 2] };
 }
 
-// The next theme in menu order, wrapping back to the first.
+// The next theme in menu order, wrapping back to the first. No saved or an unknown
+// theme means the first one (System) is showing, so the next press moves past it.
 function nextTheme(current, themes) {
   const ids = themes.map(([id]) => id);
-  const index = ids.indexOf(current);
-  return ids[(index + 1) % ids.length] ?? ids[0];
+  const index = Math.max(ids.indexOf(current), 0);
+  return ids[(index + 1) % ids.length];
 }
 
 // Why a working session has been silent: still running the tool it last started,

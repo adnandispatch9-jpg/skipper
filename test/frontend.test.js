@@ -100,7 +100,8 @@ test('chart scale rounds up to a readable maximum', () => {
 
 test('theme cycling follows menu order and wraps', () => {
   const themes = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark'], ['midnight', 'Midnight'], ['paper', 'Paper'], ['contrast', 'High contrast']];
-  assert.equal(helpers.nextTheme(null, themes), 'system');
+  assert.equal(helpers.nextTheme(null, themes), 'light', 'the first press must change the look');
+  assert.equal(helpers.nextTheme('removed-theme', themes), 'light');
   assert.equal(helpers.nextTheme('system', themes), 'light');
   assert.equal(helpers.nextTheme('paper', themes), 'contrast');
   assert.equal(helpers.nextTheme('contrast', themes), 'system');
