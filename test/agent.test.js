@@ -169,3 +169,18 @@ test('phones authenticate with a bearer token; the agent key only works from loo
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('pairing link carries host, port, token and name; Bonjour only on macOS', async () => {
+  const { pairingLink, advertise, lanAddresses } = await import('../src/pairing.js');
+  const link = new URL(pairingLink({ host: '192.168.1.5', port: 4317, token: 'tok en/+', name: 'MacBook Pro' }));
+  assert.equal(link.protocol, 'skipper:');
+  assert.equal(link.searchParams.get('token'), 'tok en/+');
+  assert.equal(link.searchParams.get('name'), 'MacBook Pro');
+  const calls = [];
+  const fake = (cmd, args) => (calls.push([cmd, args]), { on() {}, kill() { calls.push(['kill']); } });
+  advertise({ port: 4317, name: 'Skipper on Mac', platform: 'darwin', spawnImpl: fake })();
+  assert.deepEqual(calls, [['dns-sd', ['-R', 'Skipper on Mac', '_skipper._tcp', 'local', '4317']], ['kill']]);
+  advertise({ port: 1, platform: 'linux', spawnImpl: fake });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(lanAddresses({ en0: [{ family: 'IPv4', internal: false, address: '10.0.0.2' }], lo0: [{ family: 'IPv4', internal: true, address: '127.0.0.1' }] }), ['10.0.0.2']);
+});

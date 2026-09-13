@@ -295,8 +295,16 @@ if (isLoopback(host)) {
   console.log(`  Open      ${localUrl}\n`);
 } else {
   console.log('  Network access is on. Anyone with this link can read your sessions:');
-  const addresses = Object.values(os.networkInterfaces()).flat().filter((a) => a && a.family === 'IPv4' && !a.internal);
-  for (const a of addresses) console.log(`  Open      http://${a.address}:${app.port}/?token=${app.accessToken}`);
+  const { lanAddresses, pairingLink, advertise, copyToClipboard } = await import('../src/pairing.js');
+  const addresses = lanAddresses();
+  for (const a of addresses) console.log(`  Open      http://${a}:${app.port}/?token=${app.accessToken}`);
+  if (addresses.length) {
+    const link = pairingLink({ host: addresses[0], port: app.port, token: app.accessToken });
+    console.log(`\n  iPhone app: open Skipper on the phone, choose Enter the address manually and paste:\n  ${link}`);
+    if (!opts.logDir && copyToClipboard(link)) console.log('  (copied to the clipboard; paste it on your iPhone)');
+  }
+  const stopAdvertising = advertise({ port: app.port });
+  process.on('exit', stopAdvertising);
   console.log('');
 }
 if (opts.open) openBrowser(isLoopback(host) ? localUrl : `http://127.0.0.1:${app.port}/?token=${app.accessToken}`);
