@@ -24,7 +24,7 @@ Node.js 20+ is the only requirement. Please keep it that way: Skipper has no run
 | `src/actions.js` | Every write: notes, tasks, messages to the `claude` CLI |
 | `src/server.js` | HTTP server, security checks, Server-Sent Events |
 | `src/demo.js` | Fictional data for `--demo`, screenshots and tests |
-| `public/` | The UI: plain HTML, CSS and JavaScript, no build step |
+| `public/` | The UI: plain HTML, CSS and JavaScript, no build step (`logic.js` holds pure, unit-tested helpers) |
 
 ## Guidelines
 

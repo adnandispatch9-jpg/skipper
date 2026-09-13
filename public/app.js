@@ -84,30 +84,19 @@ function icon(name) {
 
 const now = () => Date.now() + state.serverOffset;
 
+
+
+
 function ago(ms) {
-  if (!ms) return '';
-  const s = Math.max(0, Math.round((now() - ms) / 1000));
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < DAY / 1000) return `${Math.floor(s / 3600)}h ago`;
-  if (s < 7 * DAY / 1000) return `${Math.floor(s / 86400)}d ago`;
-  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return formatAgo(ms, now());
 }
 
 function countdown(ms) {
-  const s = Math.round((ms - now()) / 1000);
-  if (s <= 0) return 'waking…';
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  return m < 60 ? `${m}m ${String(s % 60).padStart(2, '0')}s` : `${Math.floor(m / 60)}h ${m % 60}m`;
+  return formatCountdown(ms, now());
 }
 
-function duration(ms) {
-  if (!ms || ms < 0) return '—';
-  const m = Math.round(ms / 60000);
-  if (m < 60) return `${m}m`;
-  const hrs = Math.floor(m / 60);
-  return hrs < 48 ? `${hrs}h ${m % 60}m` : `${Math.round(hrs / 24)}d`;
+function dayBucket(at) {
+  return dayBucketAt(at, now());
 }
 
 const relTime = (ms) => h('span', { class: 'rel', dataset: { rel: String(ms || '') } }, ago(ms));
@@ -118,18 +107,8 @@ function tick() {
   for (const el of document.querySelectorAll('[data-until]')) el.textContent = countdown(Number(el.dataset.until));
 }
 
-function safeHref(url) {
-  return typeof url === 'string' && /^https:\/\//i.test(url) ? url : null;
-}
 
-function toolName(name) {
-  const mcp = String(name).match(/^mcp__(.+?)__(.+)$/);
-  return mcp ? `${mcp[1]} · ${mcp[2]}` : name;
-}
 
-function plain(text) {
-  return String(text || '').replace(/^#{1,6}\s+/gm, '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1');
-}
 
 const store = {
   get(key) { try { return localStorage.getItem(key); } catch { return null; } },
@@ -539,43 +518,11 @@ const ACTIVITY_STYLE = {
   ended: ['ended', 'check'],
 };
 
-// Loop ticks of one session within the same time group collapse into one row,
-// even when several loops interleave.
-function groupActivity(items) {
-  const out = [];
-  const loops = new Map();
-  for (const item of items) {
-    if (item.kind === 'loop') {
-      const key = `${item.sessionId}:${dayBucket(item.at)}`;
-      const group = loops.get(key);
-      if (group) {
-        group.count += 1;
-        group.firstAt = item.at;
-        if (!group.detail && item.detail) group.detail = item.detail;
-        continue;
-      }
-      const row = { ...item, count: 1, firstAt: item.at };
-      loops.set(key, row);
-      out.push(row);
-      continue;
-    }
-    out.push({ ...item, count: 1, firstAt: item.at });
-  }
-  return out;
-}
 
-function dayBucket(at) {
-  const t = now();
-  if (t - at < 3_600_000) return 'Last hour';
-  const today = new Date(t).setHours(0, 0, 0, 0);
-  if (at >= today) return 'Earlier today';
-  if (at >= today - DAY) return 'Yesterday';
-  return 'Earlier';
-}
 
 function renderActivity({ limit = 40 } = {}) {
   const filter = ACTIVITY_FILTERS.find(([id]) => id === state.activityFilter) || ACTIVITY_FILTERS[0];
-  const items = groupActivity(state.activity.filter((i) => (!filter[2] || filter[2].includes(i.kind)) && (!state.project || i.project === state.project))).slice(0, limit);
+  const items = groupActivity(state.activity.filter((i) => (!filter[2] || filter[2].includes(i.kind)) && (!state.project || i.project === state.project)), dayBucket).slice(0, limit);
   const unread = state.activity.filter((i) => i.at > state.activitySeen).length;
   const rows = [];
   let bucket = null;
@@ -724,11 +671,6 @@ function confirmButton(action, data, label) {
   return h('button', { class: 'icon-btn tiny danger', type: 'button', title: label, 'aria-label': label, dataset: { action: 'confirm', then: action, ...data } }, icon('trash'));
 }
 
-function splitAsk(message) {
-  const text = message || '';
-  const match = text.match(/^(.*?(?:to use|to run)\s+[\w-]+):\s*(.+)$/i);
-  return match ? { lead: match[1], command: match[2] } : { lead: text, command: null };
-}
 
 function attentionPanel(d) {
   if (!d.attention) return null;

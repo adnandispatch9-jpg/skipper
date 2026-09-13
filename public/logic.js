@@ -1,0 +1,82 @@
+// Pure helpers shared by the page and the tests: no DOM access, no clock reads.
+'use strict';
+
+const DAY_MS = 86_400_000;
+
+function formatAgo(ms, nowMs) {
+  if (!ms) return '';
+  const s = Math.max(0, Math.round((nowMs - ms) / 1000));
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < DAY_MS / 1000) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 7 * DAY_MS / 1000) return `${Math.floor(s / 86400)}d ago`;
+  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function formatCountdown(ms, nowMs) {
+  const s = Math.round((ms - nowMs) / 1000);
+  if (s <= 0) return 'waking…';
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return m < 60 ? `${m}m ${String(s % 60).padStart(2, '0')}s` : `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+function duration(ms) {
+  if (!ms || ms < 0) return '—';
+  const m = Math.round(ms / 60000);
+  if (m < 60) return `${m}m`;
+  const hrs = Math.floor(m / 60);
+  return hrs < 48 ? `${hrs}h ${m % 60}m` : `${Math.round(hrs / 24)}d`;
+}
+
+function safeHref(url) {
+  return typeof url === 'string' && /^https:\/\//i.test(url) ? url : null;
+}
+
+function toolName(name) {
+  const mcp = String(name).match(/^mcp__(.+?)__(.+)$/);
+  return mcp ? `${mcp[1]} · ${mcp[2]}` : name;
+}
+
+function plain(text) {
+  return String(text || '').replace(/^#{1,6}\s+/gm, '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1');
+}
+
+function splitAsk(message) {
+  const text = message || '';
+  const match = text.match(/^(.*?(?:to use|to run)\s+[\w-]+):\s*(.+)$/i);
+  return match ? { lead: match[1], command: match[2] } : { lead: text, command: null };
+}
+
+function dayBucketAt(at, t) {
+  if (t - at < 3_600_000) return 'Last hour';
+  const today = new Date(t).setHours(0, 0, 0, 0);
+  if (at >= today) return 'Earlier today';
+  if (at >= today - DAY_MS) return 'Yesterday';
+  return 'Earlier';
+}
+
+// Loop ticks of one session within the same time group collapse into one row,
+// even when several loops interleave.
+function groupActivity(items, bucket) {
+  const out = [];
+  const loops = new Map();
+  for (const item of items) {
+    if (item.kind === 'loop') {
+      const key = `${item.sessionId}:${bucket(item.at)}`;
+      const group = loops.get(key);
+      if (group) {
+        group.count += 1;
+        group.firstAt = item.at;
+        if (!group.detail && item.detail) group.detail = item.detail;
+        continue;
+      }
+      const row = { ...item, count: 1, firstAt: item.at };
+      loops.set(key, row);
+      out.push(row);
+      continue;
+    }
+    out.push({ ...item, count: 1, firstAt: item.at });
+  }
+  return out;
+}
