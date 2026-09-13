@@ -252,7 +252,7 @@ export async function writeDemo(dir, { pid = process.pid, now = Date.now() } = {
 
   await fs.mkdir(path.join(dir, 'sessions'), { recursive: true });
   for (const id of sessions) {
-    await fs.writeFile(path.join(dir, 'sessions', `${id.slice(0, 8)}.json`), JSON.stringify({ pid, sessionId: id, kind: 'interactive', entrypoint: 'cli', startedAt: now - 60 * MIN }));
+    await fs.writeFile(path.join(dir, 'sessions', `${id.slice(0, 8)}.json`), JSON.stringify({ pid, sessionId: id, kind: id === uuid('offline') ? 'bg' : 'interactive', entrypoint: 'cli', startedAt: now - 60 * MIN }));
   }
   return dir;
 }

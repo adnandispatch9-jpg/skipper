@@ -442,6 +442,7 @@ function renderSidebar(currentId) {
           h('span', { class: 'when' }, s.state === 'sleeping' && s.loop ? untilTime(s.loop.wakeAt) : relTime(s.updatedAt)),
           h('span', { class: 'sub' },
             h('span', {}, s.project),
+            s.background && s.live ? h('span', { title: 'Running in the background, not in a terminal' }, '· background') : null,
             s.todoTotal ? h('span', {}, `· ${s.todoDone}/${s.todoTotal}`) : null,
             s.agentsRunning ? h('span', {}, `· ${s.agentsRunning} agent${s.agentsRunning > 1 ? 's' : ''}`) : null,
             s.prCount ? h('span', {}, `· ${s.prCount} PR`) : null,
@@ -517,6 +518,7 @@ function sessionCard(s) {
     h('div', { class: 'card-foot' },
       metaItem('folder', s.project),
       h('span', { class: 'card-foot-right' },
+        s.background ? h('span', { class: 'meta', title: 'Running in the background, not in a terminal' }, 'background') : null,
         s.agentsRunning ? metaItem('bot', `${s.agentsRunning} running`, 'accent') : null,
         s.team ? metaItem('team', 'team') : null,
         s.prCount ? metaItem('pr', String(s.prCount)) : null,
@@ -813,12 +815,13 @@ function renderTabbar() {
 
 function composerPanel(d) {
   if (state.readOnly) return null;
-  const note = d.live ? 'Open in a terminal · sends to a background copy' : 'Continues in the background · claude attach to open';
-  return h('section', { class: `composer-dock${d.live ? ' warn' : ''}`, id: 'composer' },
+  const terminal = d.live && !d.background;
+  const note = terminal ? 'Open in a terminal · sends to a background copy' : d.live ? 'Background session · claude attach to watch it' : 'Continues in the background · claude attach to open';
+  return h('section', { class: `composer-dock${terminal ? ' warn' : ''}`, id: 'composer' },
     h('form', { dataset: { action: 'message-send' } },
       h('textarea', { name: 'message', rows: '2', maxlength: '20000', placeholder: d.state === 'waiting' ? 'Answer Claude or give the next instruction…' : 'Tell Claude what to do next…', 'aria-label': 'Message to Claude', dataset: { draft: 'message' } }, state.drafts.message[d.id] || ''),
       h('div', { class: 'composer-foot' },
-        h('span', { class: 'composer-note', title: d.live ? 'Claude Code has no public way to type into an open terminal, so Skipper resumes the conversation in the background with claude --bg --resume.' : null }, note),
+        h('span', { class: 'composer-note', title: terminal ? 'Claude Code has no public way to type into an open terminal, so Skipper resumes the conversation in the background with claude --bg --resume.' : null }, note),
         h('span', { class: 'composer-keys' }, h('kbd', {}, '⌘'), h('kbd', {}, 'Enter')),
         h('button', { class: 'btn primary', type: 'submit', disabled: state.sending ? true : null, 'aria-label': 'Send message' }, icon('send'), state.sending ? 'Sending…' : 'Send')),
     ),
@@ -967,7 +970,8 @@ function renderDetail(d) {
       h('div', { class: 'session-title' },
         h('div', { class: 'title-row' },
           h('h1', {}, d.title),
-          h('span', { class: `chip ${d.state}` }, h('i', { class: `dot ${d.state}` }), STATE_LABEL[d.state])),
+          h('span', { class: `chip ${d.state}` }, h('i', { class: `dot ${d.state}` }), STATE_LABEL[d.state]),
+          d.live && d.background ? h('span', { class: 'chip', title: 'Started with claude --bg. It has no terminal window; claude attach opens it.' }, 'Background') : null),
         h('div', { class: 'meta-line' },
           d.cwd ? h('span', { class: 'meta mono', title: d.cwd }, icon('folder'), d.cwd.replace(/^\/(Users|home)\/[^/]+/, '~')) : null,
           d.branch && d.branch !== 'HEAD' ? h('span', { class: 'meta' }, icon('branch'), d.branch) : null,

@@ -345,3 +345,11 @@ test('CSV fields are quoted and cannot run as spreadsheet formulas', async () =>
   assert.equal(csvField('=HYPERLINK("x")'), `"'=HYPERLINK(""x"")"`);
   assert.equal(csvField('@sum'), "'@sum");
 });
+
+test('background sessions are marked so they are not mistaken for terminals', async () => {
+  const { sessions } = await (await fetch(`${base}/api/sessions`)).json();
+  const loop = sessions.find((s) => s.title === 'offline-sync-loop');
+  assert.equal(loop.background, true);
+  assert.equal(sessions.find((s) => s.title === 'Checkout flow redesign').background, false);
+  assert.equal(sessions.filter((s) => !s.live).every((s) => s.background === false), true);
+});

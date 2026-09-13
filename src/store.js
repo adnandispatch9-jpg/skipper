@@ -410,6 +410,7 @@ export class Store {
         model: s.model,
         state: this.#state(s, live),
         live: Boolean(live),
+        background: live?.kind === 'bg',
         startedAt: s.startedAt,
         updatedAt: s.updatedAt,
         todoTotal: plan.length,
