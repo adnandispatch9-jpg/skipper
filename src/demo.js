@@ -174,6 +174,25 @@ export async function writeDemo(dir, { pid = process.pid, now = Date.now() } = {
     }));
   }
 
+  // 5. Needs permission: a Notification hook event with no activity after it.
+  {
+    const id = uuid('release-notes');
+    const b = builder(id, `${home}/mobile-app`, 'release/4.2', now - 14 * MIN);
+    b.meta({ type: 'custom-title', customTitle: 'Ship 4.2 to TestFlight' });
+    b.prompt('Bump the version, build and upload 4.2 to TestFlight.');
+    b.tool('TodoWrite', todos([
+      ['completed', 'Bump version to 4.2.0'],
+      ['completed', 'Run the release build'],
+      ['in_progress', 'Upload to TestFlight', 'Uploading to TestFlight'],
+    ]));
+    b.at(now - 95_000).say('The release build passed. Uploading the archive with fastlane now.');
+    b.tool('Bash', { command: 'bundle exec fastlane beta' });
+    await save('mobile-app', id, b, { live: true });
+    const events = path.join(dir, '.skipper');
+    await fs.mkdir(events, { recursive: true });
+    await fs.writeFile(path.join(events, 'events.jsonl'), `${JSON.stringify({ at: now - 80_000, sessionId: id, kind: 'permission', message: 'Claude needs your permission to use Bash: bundle exec fastlane beta' })}\n`);
+  }
+
   // Ended sessions.
   const ended = [
     ['infra', 'pg16', 'Postgres 16 upgrade runbook', 'ops/pg16', 3 * 60 * MIN, 4.12, 'https://github.com/acme/infra/pull/77', 'acme/infra', 77],

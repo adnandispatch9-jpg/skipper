@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { Store } from './store.js';
 import { Notes, Tasks, ActionError, sendMessage } from './actions.js';
+import { eventsFile, hooksStatus } from './hooks.js';
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
@@ -72,7 +73,9 @@ export async function startServer({
   claudeBin = 'claude',
   log = console.log,
 }) {
-  const store = new Store(claudeDir);
+  const skipperDir = dataDir ?? path.join(claudeDir, '..', '.skipper');
+  const store = new Store(claudeDir, { eventsFile: eventsFile(skipperDir) });
+  const settingsFile = path.join(claudeDir, 'settings.json');
   await store.refresh();
 
   const remote = !isLoopback(host);
@@ -81,6 +84,9 @@ export async function startServer({
 
   const broadcast = () => {
     for (const res of clients) res.write('event: change\ndata: {}\n\n');
+    for (const alert of store.drainAlerts()) {
+      for (const res of clients) res.write(`event: alert\ndata: ${JSON.stringify(alert)}\n\n`);
+    }
   };
 
   let pending = null;
@@ -89,7 +95,8 @@ export async function startServer({
     pending = setTimeout(async () => {
       pending = null;
       try {
-        if (await store.refresh()) broadcast();
+        const changed = await store.refresh();
+        if (changed || store.pendingAlerts.length) broadcast();
       } catch (error) {
         log(`refresh failed: ${error.message}`);
       }
@@ -97,6 +104,10 @@ export async function startServer({
   };
 
   const watchers = [];
+  try {
+    await fs.mkdir(skipperDir, { recursive: true });
+    watchers.push(watch(skipperDir, scheduleRefresh));
+  } catch {}
   for (const sub of ['projects', 'sessions', 'tasks', 'teams']) {
     try {
       watchers.push(watch(path.join(claudeDir, sub), { recursive: true }, scheduleRefresh));
@@ -110,7 +121,7 @@ export async function startServer({
     for (const res of clients) res.write(': ping\n\n');
   }, 25000);
 
-  const notes = new Notes(dataDir ?? path.join(claudeDir, '..', '.skipper'));
+  const notes = new Notes(skipperDir);
   const tasks = new Tasks(claudeDir, store);
 
   async function readBody(req) {
@@ -161,7 +172,7 @@ export async function startServer({
         return send(res, 200, await fs.readFile(path.join(PUBLIC_DIR, file)), type, { 'Cache-Control': 'no-cache' });
       }
       if (url.pathname === '/api/sessions') {
-        return json(res, 200, { now: Date.now(), claudeDir, readOnly, sessions: store.list() });
+        return json(res, 200, { now: Date.now(), claudeDir, readOnly, hooks: await hooksStatus({ settingsFile }), sessions: store.list() });
       }
       if (parts[0] === 'api' && parts[1] === 'sessions' && parts.length === 3) {
         const session = store.get(parts[2]);

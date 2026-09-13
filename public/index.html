@@ -25,9 +25,17 @@
         <input id="search" type="search" placeholder="Search sessions" autocomplete="off" spellcheck="false">
         <kbd>/</kbd>
       </label>
-      <button class="icon-btn" id="notify-btn" type="button" aria-pressed="false" title="Notify me when a session needs me">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
-      </button>
+      <div class="menu-wrap">
+        <button class="icon-btn" id="notify-btn" type="button" title="Alerts" aria-haspopup="menu" aria-expanded="false" aria-controls="notify-menu">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
+        </button>
+        <div class="menu notify-menu" id="notify-menu" role="menu" aria-label="Alerts" hidden>
+          <button type="button" role="menuitemcheckbox" data-setting="sound" aria-checked="false">Play a sound</button>
+          <button type="button" role="menuitemcheckbox" data-setting="desktop" aria-checked="false">Desktop notifications</button>
+          <button type="button" role="menuitem" data-setting="test">Test alert</button>
+          <p class="menu-note" id="hooks-note"></p>
+        </div>
+      </div>
       <div class="menu-wrap">
         <button class="icon-btn" id="theme-btn" type="button" title="Theme" aria-haspopup="menu" aria-expanded="false" aria-controls="theme-menu">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>

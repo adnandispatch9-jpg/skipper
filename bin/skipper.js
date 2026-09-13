@@ -2,15 +2,20 @@
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { readFileSync, rmSync } from 'node:fs';
+import { readFileSync, rmSync, existsSync } from 'node:fs';
 import { startServer, isLoopback } from '../src/server.js';
 import { writeDemo } from '../src/demo.js';
+import { recordHook, installHooks, uninstallHooks, hooksStatus } from '../src/hooks.js';
+import { fileURLToPath } from 'node:url';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
 const HELP = `Skipper ${pkg.version}: a live dashboard for your Claude Code sessions
 
 Usage: skipper [options]
+       skipper hooks install    Get sound and desktop alerts for permission prompts
+       skipper hooks uninstall  Remove Skipper's Claude Code hooks
+       skipper hooks status
 
 Options:
   -p, --port <n>         Port to listen on (default 4317, or $PORT)
@@ -63,7 +68,52 @@ function openBrowser(url) {
   spawn(command, args, { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
 }
 
-const opts = parseArgs(process.argv.slice(2));
+const argv = process.argv.slice(2);
+const home = os.homedir();
+const defaultDataDir = () => path.resolve(expandHome(process.env.SKIPPER_DATA_DIR ?? path.join(home, '.skipper')));
+const defaultClaudeDir = () => path.resolve(expandHome(process.env.CLAUDE_CONFIG_DIR ?? path.join(home, '.claude')));
+
+// Called by Claude Code itself (see `skipper hooks install`): record and exit quickly.
+if (argv[0] === 'hook') {
+  let input = '';
+  process.stdin.setEncoding('utf8');
+  for await (const chunk of process.stdin) {
+    input += chunk;
+    if (input.length > 65536) break;
+  }
+  await recordHook(input, defaultDataDir());
+  process.exit(0);
+}
+
+if (argv[0] === 'hooks') {
+  const settingsFile = path.join(defaultClaudeDir(), 'settings.json');
+  const action = argv[1] || 'status';
+  try {
+    if (action === 'install') {
+      const scriptPath = fileURLToPath(import.meta.url);
+      if (scriptPath.includes(`${path.sep}_npx${path.sep}`)) {
+        console.warn('Note: you are running Skipper through npx, whose cache can be cleared.\nFor lasting hooks, install it: npm install -g github:bilol-makhmudov/skipper\n');
+      }
+      // Prefer the node on PATH: process.execPath can be a versioned path that an upgrade removes.
+      const onPath = (process.env.PATH || '').split(path.delimiter).map((dir) => path.join(dir, process.platform === 'win32' ? 'node.exe' : 'node')).find((file) => existsSync(file));
+      await installHooks({ settingsFile, nodePath: onPath || process.execPath, scriptPath });
+      console.log(`Installed Notification and Stop hooks in ${settingsFile}\nA backup was saved as settings.json.skipper-backup. New Claude Code sessions pick this up; restart open ones.`);
+    } else if (action === 'uninstall') {
+      const { removed } = await uninstallHooks({ settingsFile });
+      console.log(removed ? `Removed Skipper hooks from ${settingsFile}` : 'No Skipper hooks were installed.');
+    } else if (action === 'status') {
+      const status = await hooksStatus({ settingsFile });
+      console.log(status.installed ? 'Skipper hooks are installed.' : 'Skipper hooks are not installed. Run: skipper hooks install');
+    } else {
+      fail(`Unknown hooks command: ${action}`);
+    }
+  } catch (error) {
+    fail(error.message);
+  }
+  process.exit(0);
+}
+
+const opts = parseArgs(argv);
 if (opts.help) {
   console.log(HELP);
   process.exit(0);
@@ -78,13 +128,13 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) fail(`Invalid port: ${o
 const host = opts.host ?? '127.0.0.1';
 const claudeDir = opts.demo
   ? await writeDemo(path.join(os.tmpdir(), `skipper-demo-${process.pid}`))
-  : path.resolve(expandHome(opts.claudeDir ?? process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), '.claude')));
+  : opts.claudeDir ? path.resolve(expandHome(opts.claudeDir)) : defaultClaudeDir();
 
 let app;
 try {
   app = await startServer({
     claudeDir,
-    dataDir: opts.demo ? path.join(claudeDir, '.skipper') : path.resolve(expandHome(opts.dataDir ?? process.env.SKIPPER_DATA_DIR ?? path.join(os.homedir(), '.skipper'))),
+    dataDir: opts.demo ? path.join(claudeDir, '.skipper') : opts.dataDir ? path.resolve(expandHome(opts.dataDir)) : defaultDataDir(),
     host,
     port,
     token: process.env.SKIPPER_TOKEN || null,

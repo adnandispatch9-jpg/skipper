@@ -41,7 +41,11 @@ function pidAlive(pid) {
 }
 
 export class Store {
-  constructor(claudeDir, { now = Date.now, isAlive = pidAlive } = {}) {
+  constructor(claudeDir, { now = Date.now, isAlive = pidAlive, eventsFile = null } = {}) {
+    this.eventsFile = eventsFile;
+    this.eventsOffset = 0;
+    this.attention = new Map(); // sessionId -> latest permission/question hook event
+    this.pendingAlerts = [];
     this.claudeDir = claudeDir;
     this.now = now;
     this.isAlive = isAlive;
@@ -74,7 +78,7 @@ export class Store {
     }
     for (const file of this.files.keys()) if (!seen.has(file)) this.files.delete(file);
 
-    await Promise.all([this.#readLive(), this.#readTasks(), this.#readTeams()]);
+    await Promise.all([this.#readLive(), this.#readTasks(), this.#readTeams(), this.#readEvents()]);
 
     const signature = JSON.stringify(this.list().map((s) => [s.id, s.updatedAt, s.state, s.todoDone, s.todoTotal, s.agentsRunning, s.agentsTotal, s.prCount, s.loop?.wakeAt]));
     const changed = signature !== this.signature;
@@ -174,6 +178,61 @@ export class Store {
     this.extras.set(id, extras);
   }
 
+  // Hook events are appended by `skipper hook`; read only what is new.
+  async #readEvents() {
+    if (!this.eventsFile) return;
+    let stat;
+    try {
+      stat = await fs.stat(this.eventsFile);
+    } catch {
+      return;
+    }
+    const firstRead = this.eventsOffset === 0 && this.attention.size === 0 && !this.eventsRead;
+    this.eventsRead = true;
+    if (stat.size < this.eventsOffset) this.eventsOffset = 0;
+    if (stat.size === this.eventsOffset) return;
+    const handle = await fs.open(this.eventsFile, 'r');
+    let text;
+    try {
+      const length = Math.min(stat.size - this.eventsOffset, 1 << 20);
+      const buffer = Buffer.alloc(length);
+      await handle.read(buffer, 0, length, this.eventsOffset);
+      const end = buffer.lastIndexOf(0x0a) + 1;
+      text = buffer.toString('utf8', 0, end);
+      this.eventsOffset += end;
+    } finally {
+      await handle.close();
+    }
+    for (const line of text.split('\n')) {
+      if (!line) continue;
+      let event;
+      try {
+        event = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (!isSessionId(event.sessionId) || !Number.isFinite(event.at)) continue;
+      if (event.kind === 'permission' || event.kind === 'question') this.attention.set(event.sessionId, event);
+      // Replaying an old log on startup must not ring every bell at once.
+      if (!firstRead && this.now() - event.at < 60_000) this.pendingAlerts.push(event);
+    }
+  }
+
+  drainAlerts() {
+    const alerts = this.pendingAlerts.splice(0);
+    return alerts.map((event) => {
+      const s = this.list().find((x) => x.id === event.sessionId);
+      return { ...event, title: s?.title ?? event.sessionId.slice(0, 8), project: s?.project ?? null };
+    });
+  }
+
+  #pendingAttention(s, live) {
+    const event = this.attention.get(s.id);
+    if (!event || !live) return null;
+    // Any transcript activity after the prompt means it was answered.
+    return (s.updatedAt ?? 0) <= event.at ? event : null;
+  }
+
   async #readLive() {
     this.live = new Map();
     for (const file of await listDir(path.join(this.claudeDir, 'sessions'))) {
@@ -243,6 +302,7 @@ export class Store {
   #state(s, live) {
     const now = this.now();
     if (!live) return 'ended';
+    if (this.#pendingAttention(s, live)) return 'permission';
     const loopPending = s.loop?.active && s.loop.wakeAt > now;
     if (live.status === 'busy') return 'working';
     if (live.status === 'idle') return loopPending ? 'sleeping' : 'waiting';
@@ -310,6 +370,10 @@ export class Store {
         prCount: s.prs.size,
         costUsd: s.cost?.usd ?? null,
         team: this.teams.get(s.id)?.name ?? null,
+        attention: (() => {
+          const event = this.#pendingAttention(s, live);
+          return event ? { kind: event.kind, message: event.message, at: event.at } : null;
+        })(),
       });
     }
     return out.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));

@@ -1,6 +1,6 @@
 'use strict';
 
-const STATE_LABEL = { waiting: 'Needs you', working: 'Working', sleeping: 'Sleeping', ended: 'Ended' };
+const STATE_LABEL = { permission: 'Needs permission', waiting: 'Needs you', working: 'Working', sleeping: 'Sleeping', ended: 'Ended' };
 const DAY = 86_400_000;
 
 const state = {
@@ -10,7 +10,10 @@ const state = {
   claudeDir: '',
   filter: 'active',
   query: '',
-  notify: false,
+  sound: false,
+  desktop: false,
+  hooks: null,
+  lastAlert: {},
   previous: null,
   loaded: false,
   readOnly: false,
@@ -141,6 +144,8 @@ async function load() {
   state.serverOffset = data.now - Date.now();
   state.claudeDir = data.claudeDir;
   state.readOnly = Boolean(data.readOnly);
+  state.hooks = data.hooks || null;
+  renderHooksNote();
   notifyChanges(data.sessions);
   state.sessions = data.sessions;
   const id = route().id;
@@ -178,6 +183,11 @@ function connect() {
   const events = new EventSource('/api/events');
   events.addEventListener('change', reload);
   events.addEventListener('hello', reload);
+  events.addEventListener('alert', (event) => {
+    try {
+      onHookAlert(JSON.parse(event.data));
+    } catch {}
+  });
   events.onerror = () => {
     events.close();
     reload();
@@ -185,7 +195,67 @@ function connect() {
   };
 }
 
-/* ---------- notifications ---------- */
+/* ---------- alerts: sound, toast, desktop notification ---------- */
+
+let audio = null;
+function chime(kind) {
+  if (!state.sound) return;
+  try {
+    audio ||= new AudioContext();
+    if (audio.state === 'suspended') audio.resume();
+    const patterns = {
+      permission: [[880, 0], [880, 0.18], [1175, 0.36]],
+      question: [[784, 0], [1047, 0.16]],
+      waiting: [[659, 0], [880, 0.14]],
+      done: [[523, 0], [784, 0.12]],
+    };
+    const t0 = audio.currentTime + 0.02;
+    for (const [freq, offset] of patterns[kind] || patterns.waiting) {
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t0 + offset);
+      gain.gain.exponentialRampToValueAtTime(kind === 'permission' ? 0.35 : 0.2, t0 + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + offset + 0.32);
+      osc.connect(gain).connect(audio.destination);
+      osc.start(t0 + offset);
+      osc.stop(t0 + offset + 0.34);
+    }
+  } catch {}
+}
+
+function alertUser({ id, kind, title, body }) {
+  const key = `${id}:${kind === 'done' ? 'waiting' : kind}`;
+  if (id && Date.now() - (state.lastAlert[key] || 0) < 20_000) return;
+  state.lastAlert[key] = Date.now();
+  if (kind === 'done') state.lastAlert[`${id}:waiting`] = Date.now();
+
+  chime(kind);
+  const toast = h('div', { class: `toast ${kind === 'permission' ? 'urgent' : ''}`, role: kind === 'permission' ? 'alert' : 'status' },
+    id ? h('a', { href: `#/s/${id}` }, h('b', {}, title), body ? h('span', {}, body) : null) : h('span', {}, title, body ? ` ${body}` : ''));
+  $('#toasts').append(toast);
+  setTimeout(() => toast.remove(), kind === 'permission' ? 15000 : 7000);
+
+  const showDesktop = state.desktop && 'Notification' in window && Notification.permission === 'granted' && (document.hidden || kind === 'permission');
+  if (showDesktop) {
+    const n = new Notification(title, { body: body || '', tag: `${id}-${kind}`, icon: '/icon.svg', requireInteraction: kind === 'permission' });
+    n.onclick = () => {
+      window.focus();
+      if (id) location.hash = `#/s/${id}`;
+      n.close();
+    };
+  }
+}
+
+function onHookAlert(event) {
+  const title = event.title || 'Claude Code';
+  if (event.kind === 'permission') alertUser({ id: event.sessionId, kind: 'permission', title: `Permission needed: ${title}`, body: event.message || 'Claude is waiting for your approval.' });
+  else if (event.kind === 'question') alertUser({ id: event.sessionId, kind: 'question', title: `Question from Claude: ${title}`, body: event.message });
+  else if (event.kind === 'idle') alertUser({ id: event.sessionId, kind: 'waiting', title: `Needs you: ${title}`, body: event.message });
+  else if (event.kind === 'done') alertUser({ id: event.sessionId, kind: 'done', title: `Finished: ${title}`, body: 'Claude is waiting for your next message.' });
+  else alertUser({ id: event.sessionId, kind: 'waiting', title, body: event.message });
+}
 
 function notifyChanges(next) {
   const before = state.previous;
@@ -194,22 +264,38 @@ function notifyChanges(next) {
   for (const s of next) {
     const old = before.get(s.id);
     if (!old) continue;
-    if (s.state === 'waiting' && old.state === 'working') alertUser(`Needs you: ${s.title}`, s.id);
-    else if (s.agentsRunning < old.agentsRunning && s.live) alertUser(`Subagent finished in ${s.title}`, s.id);
+    if (s.state === 'permission' && old.state !== 'permission') {
+      alertUser({ id: s.id, kind: 'permission', title: `Permission needed: ${s.title}`, body: s.attention?.message || 'Claude is waiting for your approval.' });
+    } else if (s.state === 'waiting' && old.state === 'working') {
+      alertUser({ id: s.id, kind: 'waiting', title: `Needs you: ${s.title}`, body: 'Claude finished and is waiting for you.' });
+    } else if (s.agentsRunning < old.agentsRunning && s.live) {
+      alertUser({ id: `${s.id}-agents`, kind: 'done', title: `Subagent finished in ${s.title}` });
+    }
   }
 }
 
-function alertUser(message, id) {
-  const toast = h('div', { class: 'toast', role: 'status' }, h('a', { href: `#/s/${id}` }, message));
-  $('#toasts').append(toast);
-  setTimeout(() => toast.remove(), 7000);
-  if (state.notify && 'Notification' in window && Notification.permission === 'granted' && document.hidden) {
-    const n = new Notification('Skipper', { body: message, tag: id, icon: '/icon.svg' });
-    n.onclick = () => {
-      window.focus();
-      location.hash = `#/s/${id}`;
-    };
+function renderHooksNote() {
+  const note = $('#hooks-note');
+  if (!note) return;
+  if (state.hooks?.installed) {
+    note.textContent = 'Claude Code hooks are on: permission prompts alert you instantly.';
+  } else {
+    note.replaceChildren('For instant permission-prompt alerts, run ', h('code', {}, 'skipper hooks install'), '.');
   }
+}
+
+function syncNotifyMenu() {
+  for (const item of document.querySelectorAll('[data-setting="sound"], [data-setting="desktop"]')) {
+    item.setAttribute('aria-checked', String(Boolean(state[item.dataset.setting])));
+  }
+  $('#notify-btn').setAttribute('aria-pressed', String(state.sound || state.desktop));
+}
+
+function toggleNotifyMenu(open) {
+  const menu = $('#notify-menu');
+  const show = open ?? menu.hidden;
+  menu.hidden = !show;
+  $('#notify-btn').setAttribute('aria-expanded', String(show));
 }
 
 /* ---------- routing ---------- */
@@ -236,7 +322,7 @@ function visibleSessions() {
 }
 
 function renderPulse() {
-  const counts = { waiting: 0, working: 0, sleeping: 0 };
+  const counts = { permission: 0, waiting: 0, working: 0, sleeping: 0 };
   let agents = 0;
   for (const s of state.sessions) {
     if (counts[s.state] != null) counts[s.state]++;
@@ -244,18 +330,20 @@ function renderPulse() {
   }
   const pill = (dot, n, label, optional) => h('span', { class: `pulse${optional ? ' optional' : ''}` }, dot && h('i', { class: `dot ${dot}` }), h('b', {}, n), label);
   $('#pulse').replaceChildren(
-    pill('waiting', counts.waiting, 'need you'),
+    pill(counts.permission ? 'permission' : 'waiting', counts.waiting + counts.permission, 'need you'),
     pill('working', counts.working, 'working'),
     pill('sleeping', counts.sleeping, 'sleeping', true),
     pill(null, agents, agents === 1 ? 'subagent running' : 'subagents running', true),
   );
-  document.title = counts.waiting ? `(${counts.waiting}) Skipper` : 'Skipper';
+  const needs = counts.waiting + counts.permission;
+  document.title = counts.permission ? `(${needs}) Permission needed · Skipper` : needs ? `(${needs}) Skipper` : 'Skipper';
   return { ...counts, agents };
 }
 
 function renderSidebar(currentId) {
   const list = visibleSessions();
   const groups = [
+    ['Needs permission', list.filter((s) => s.state === 'permission')],
     ['Needs you', list.filter((s) => s.state === 'waiting')],
     ['Working', list.filter((s) => s.state === 'working')],
     ['Sleeping', list.filter((s) => s.state === 'sleeping')],
@@ -307,7 +395,8 @@ function sessionCard(s) {
       h('span', { class: 'meta' }, s.state === 'sleeping' && s.loop ? ['wakes in ', untilTime(s.loop.wakeAt)] : relTime(s.updatedAt)),
     ),
     h('div', { class: 'card-title' }, s.title),
-    s.current || s.lastText ? h('div', { class: 'card-now' }, plain(s.state === 'sleeping' && s.loop?.reason ? s.loop.reason : s.current || s.lastText)) : null,
+    s.attention ? h('div', { class: 'card-now attention-text' }, s.attention.message || 'Waiting for your approval in the terminal.')
+      : s.current || s.lastText ? h('div', { class: 'card-now' }, plain(s.state === 'sleeping' && s.loop?.reason ? s.loop.reason : s.current || s.lastText)) : null,
     progress(s.todoDone, s.todoTotal),
     h('div', { class: 'card-foot' },
       h('span', { class: 'meta' }, icon('folder'), s.project),
@@ -327,7 +416,7 @@ function renderOverview() {
     );
   }
   const live = state.sessions.filter((s) => s.live && matches(s));
-  const order = { waiting: 0, working: 1, sleeping: 2 };
+  const order = { permission: 0, waiting: 1, working: 2, sleeping: 3 };
   live.sort((a, b) => order[a.state] - order[b.state] || b.updatedAt - a.updatedAt);
   const recent = state.sessions.filter((s) => !s.live && matches(s)).slice(0, 8);
 
@@ -336,13 +425,13 @@ function renderOverview() {
   return h('div', {},
     h('div', { class: 'page-head' },
       h('div', {},
-        h('h1', {}, counts.waiting ? `${counts.waiting} session${counts.waiting > 1 ? 's' : ''} waiting on you` : live.length ? 'Everything is moving' : 'All quiet'),
+        h('h1', {}, counts.permission ? `${counts.permission} session${counts.permission > 1 ? 's' : ''} need${counts.permission > 1 ? '' : 's'} your permission` : counts.waiting ? `${counts.waiting} session${counts.waiting > 1 ? 's' : ''} waiting on you` : live.length ? 'Everything is moving' : 'All quiet'),
         h('p', { class: 'lede' }, `${live.length} live session${live.length === 1 ? '' : 's'} · ${state.sessions.length} in history`),
       ),
       h('a', { class: 'meta', href: '#/sessions' }, icon('list'), 'All sessions'),
     ),
     h('div', { class: 'stats' },
-      stat('waiting', counts.waiting, 'Need you'),
+      stat(counts.permission ? 'permission' : 'waiting', counts.waiting + counts.permission, 'Need you'),
       stat('working', counts.working, 'Working'),
       stat('sleeping', counts.sleeping, 'Sleeping loops'),
       stat('', counts.agents, 'Subagents running'),
@@ -423,6 +512,15 @@ function planPanel(d) {
 
 function confirmButton(action, data, label) {
   return h('button', { class: 'icon-btn tiny danger', type: 'button', title: label, 'aria-label': label, dataset: { action: 'confirm', then: action, ...data } }, icon('trash'));
+}
+
+function attentionPanel(d) {
+  if (!d.attention) return null;
+  return h('section', { class: 'panel attention', role: 'alert' },
+    h('div', { class: 'panel-head' }, h('h2', {}, d.attention.kind === 'question' ? 'Claude asked you something' : 'Permission needed'), h('span', { class: 'meta' }, relTime(d.attention.at))),
+    h('p', { class: 'quote' }, d.attention.message || 'Claude is waiting for your approval.'),
+    h('p', { class: 'hint' }, 'Answer it in the terminal where this session is running.'),
+  );
 }
 
 function composerPanel(d) {
@@ -584,7 +682,7 @@ function renderDetail(d) {
       strip('Lines', d.cost ? `+${d.cost.linesAdded} −${d.cost.linesRemoved}` : '—'),
     ),
     detailGrid(
-      [composerPanel(d), nowPanel, planPanel(d), agentsPanel(d), d.lastPrompt ? panel('Your last prompt', null, h('p', { class: 'quote clamp' }, d.lastPrompt)) : null],
+      [attentionPanel(d), composerPanel(d), nowPanel, planPanel(d), agentsPanel(d), d.lastPrompt ? panel('Your last prompt', null, h('p', { class: 'quote clamp' }, d.lastPrompt)) : null],
       [loopPanel(d), notesPanel(d), workflowsPanel(d), teamPanel(d), linksPanel(d)],
     ),
   );
@@ -834,21 +932,47 @@ function init() {
   }
   document.addEventListener('click', (event) => {
     if (!event.target.closest('#theme-menu')) toggleThemeMenu(false);
+    if (!event.target.closest('#notify-menu')) toggleNotifyMenu(false);
   });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(store.get('skipper.theme')));
   wireActions();
 
-  state.notify = store.get('skipper.notify') === '1' && 'Notification' in window && Notification.permission === 'granted';
-  const notifyBtn = $('#notify-btn');
-  notifyBtn.setAttribute('aria-pressed', String(state.notify));
-  notifyBtn.addEventListener('click', async () => {
-    if (!state.notify && 'Notification' in window && Notification.permission !== 'granted') {
-      await Notification.requestPermission();
-    }
-    state.notify = !state.notify && 'Notification' in window && Notification.permission === 'granted';
-    store.set('skipper.notify', state.notify ? '1' : '0');
-    notifyBtn.setAttribute('aria-pressed', String(state.notify));
+  state.sound = store.get('skipper.sound') !== '0';
+  state.desktop = store.get('skipper.desktop') === '1' && 'Notification' in window && Notification.permission === 'granted';
+  syncNotifyMenu();
+  $('#notify-btn').addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleThemeMenu(false);
+    toggleNotifyMenu();
   });
+  $('#notify-menu').addEventListener('click', async (event) => {
+    event.stopPropagation();
+    const item = event.target.closest('[data-setting]');
+    if (!item) return;
+    if (item.dataset.setting === 'sound') {
+      state.sound = !state.sound;
+      store.set('skipper.sound', state.sound ? '1' : '0');
+      if (state.sound) chime('waiting');
+    } else if (item.dataset.setting === 'desktop') {
+      if (!state.desktop && 'Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
+      const allowed = 'Notification' in window && Notification.permission === 'granted';
+      if (!allowed && !state.desktop) toast('Notifications are blocked for this site. Allow them in your browser settings.', 'error');
+      state.desktop = !state.desktop && allowed;
+      store.set('skipper.desktop', state.desktop ? '1' : '0');
+    } else if (item.dataset.setting === 'test') {
+      state.lastAlert = {};
+      alertUser({ id: null, kind: 'permission', title: 'Permission needed: test alert', body: 'This is what a permission prompt sounds like.' });
+    }
+    syncNotifyMenu();
+  });
+  // Browsers only allow audio after a user gesture; unlock it on the first one.
+  document.addEventListener('pointerdown', () => {
+    if (!state.sound) return;
+    try {
+      audio ||= new AudioContext();
+      if (audio.state === 'suspended') audio.resume();
+    } catch {}
+  }, { once: true });
 
   state.filter = store.get('skipper.filter') === 'all' ? 'all' : 'active';
   for (const btn of document.querySelectorAll('[data-filter]')) {
@@ -875,8 +999,9 @@ function init() {
         search.value = '';
         state.query = '';
         render();
-      } else if (!$('#theme-menu').hidden) {
+      } else if (!$('#theme-menu').hidden || !$('#notify-menu').hidden) {
         toggleThemeMenu(false);
+        toggleNotifyMenu(false);
       } else if (route().name !== 'overview') {
         location.hash = '#/';
       }

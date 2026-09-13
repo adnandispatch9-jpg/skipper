@@ -157,3 +157,24 @@ test('network mode requires the access token', async () => {
     await remote.close();
   }
 });
+
+test('permission hook events put a session in the permission state until it moves on', async () => {
+  const { sessions } = await (await fetch(`${base}/api/sessions`)).json();
+  const release = sessions.find((s) => s.title === 'Ship 4.2 to TestFlight');
+  assert.equal(release.state, 'permission');
+  assert.match(release.attention.message, /fastlane/);
+
+  const { recordHook } = await import('../src/hooks.js');
+  const other = sessions.find((s) => s.title === 'Fix flaky webhook retries');
+  await recordHook(JSON.stringify({ hook_event_name: 'Notification', session_id: other.id, message: 'Claude needs your permission to use Edit', notification_type: 'permission_prompt' }), path.join(dir, '.skipper'));
+  await app.store.refresh();
+  assert.equal(app.store.list().find((s) => s.id === other.id).state, 'permission');
+  const alerts = app.store.drainAlerts();
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].title, 'Fix flaky webhook retries');
+
+  // New transcript activity after the prompt means it was answered.
+  const entry = [...app.store.files.values()].find((e) => e.summary.id === other.id);
+  entry.summary.updatedAt = Date.now() + 1000;
+  assert.equal(app.store.list().find((s) => s.id === other.id).state === 'permission', false);
+});

@@ -26,7 +26,7 @@ Running several Claude Code agents at once is powerful and hard to follow. One t
 - **`/loop` countdowns.** See when a self-paced loop wakes next and why it went to sleep.
 - **Workflows, PRs and artifacts.** Multi-agent workflow runs, linked pull requests and published artifacts, one click away.
 - **Cost and history.** Spend, turns and lines changed for every session, searchable across all your projects.
-- **Desktop notifications** when a session finishes its turn or a subagent completes.
+- **Permission alerts with sound.** The moment Claude asks to run a command or edit a file, Skipper plays a chime, shows a desktop notification and moves the session to **Needs permission**.
 
 ## Steer, not just watch
 
@@ -72,6 +72,25 @@ npm start          # or: npm run demo
 
 Requires Node.js 20 or newer. There is nothing to install: Skipper has **zero runtime dependencies**.
 
+## Never miss a permission prompt
+
+```bash
+skipper hooks install
+```
+
+This adds two official [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) (`Notification` and `Stop`) to `~/.claude/settings.json`. Your other settings and hooks are kept, and a backup is saved next to the file. From then on, every new Claude Code session tells Skipper instantly when it:
+
+| Event | What you get |
+| --- | --- |
+| Needs permission to use a tool | Urgent chime, desktop notification that stays until you click it, **Needs permission** state |
+| Asks you a question | Chime and notification |
+| Finishes its turn | Soft chime: "waiting for your next message" |
+| Has been idle, waiting for input | Reminder chime |
+
+Choose sound and desktop notifications from the bell menu, and use **Test alert** to hear it. Remove the hooks any time with `skipper hooks uninstall`. The hook only appends a line to `~/.skipper/events.jsonl` and exits, so it can never slow down or break a session.
+
+> Tip: browsers only play sound after you have clicked the page once, so click anywhere in Skipper after opening it.
+
 ## Themes
 
 System, Light, Dark, **Midnight** (true black for OLED screens), **Paper** (warm and serif) and **High contrast**. Pick one from the moon/sun button in the top bar. Skipper also works as an installable app on your phone or desktop.
@@ -87,6 +106,7 @@ System, Light, Dark, **Midnight** (true black for OLED screens), **Paper** (warm
 | `--read-only` | off | Disable messages, notes and task edits |
 | `--demo` | off | Serve fictional sample sessions |
 | `-o, --open` | off | Open the dashboard in your browser |
+| `hooks install` / `uninstall` / `status` | | Manage the permission and turn-finished alerts |
 
 ### Check on agents from your phone
 
@@ -124,6 +144,7 @@ Claude Code already records everything Skipper needs on your disk:
 | `~/.claude/projects/*/<session>/subagents`, `/workflows` | Subagent names, models, worktrees; workflow run results |
 | `~/.claude/sessions/*.json` | Which sessions are live, and whether they are busy or idle |
 | `~/.claude/tasks`, `~/.claude/teams` | Task lists and agent teams |
+| `~/.skipper/events.jsonl` | Permission prompts and finished turns, written by `skipper hooks` |
 
 Transcripts are read incrementally from the last byte seen, so a history of hundreds of megabytes stays fast. File watchers push changes to the browser over Server-Sent Events, with no polling and no refresh.
 
