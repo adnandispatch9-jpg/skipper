@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- iPhone app (Flutter, in `mobile/`) with QR pairing from the dashboard and a voice assistant for questions about your sessions, in English or Uzbek. Messages it drafts are only sent after you confirm.
+- Optional voice: free local recognition with Whisper and spoken answers through edge-tts, or Azure AI Speech.
+- The network access token persists across restarts; `skipper pair reset` issues a new one. `skipper service install --host 0.0.0.0` runs the service on your Wi-Fi.
+- No dollar amounts anywhere. The recorded figure is an API list-price estimate, not what a Pro or Max subscriber pays; the usage page shows active sessions instead.
+- Security: the assistant's internal key stays off the command line, voice requests are rate limited, and service logs are private with the token redacted.
 - `skipper doctor` checks Node, Claude Code data, hooks, recent hook events, notifications, the service and the dashboard, and says what to run for anything missing.
 - Quiet sessions say which tool they are still running.
 - Reply from the Needs you queue opens the session ready to type.

@@ -100,7 +100,11 @@ Exact token counts from every response, including subagents, per day, project an
 skipper --host 0.0.0.0
 ```
 
-Skipper prints a link with a one-time access token for every network address. Open it on your phone once and a secure cookie keeps you signed in. Without the token, nothing is served.
+Skipper prints a link with an access token for every network address. Open it on your phone once and a secure cookie keeps you signed in. Without the token, nothing is served. The token is kept across restarts so paired devices stay signed in; `skipper pair reset` issues a new one.
+
+To keep it reachable in the background, install the service with `skipper service install --host 0.0.0.0`.
+
+**iPhone app.** The Flutter app in [`mobile/`](mobile/) pairs by scanning the QR code from the dashboard's phone button, and adds a voice assistant that answers questions about your sessions in English or Uzbek. Nothing it drafts is sent to a session until you confirm. Voice is optional: `skipper voice setup --free` (Whisper on the Mac, spoken answers through edge-tts) or `skipper voice setup --region <azure-region>`.
 
 ## Never miss a permission prompt
 
