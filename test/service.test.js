@@ -35,3 +35,10 @@ test('schtasks commands target the Skipper task and status reads the CSV row', (
   assert.equal(windowsTaskRunning('"\\Skipper","N/A","Running"\r\n'), true);
   assert.equal(windowsTaskRunning('"\\Skipper","9/14/2026 9:00:00 AM","Ready"\r\n'), false);
 });
+
+test('services can listen on the network for the iPhone app', () => {
+  const plist = launchdPlist({ nodePath: '/usr/local/bin/node', scriptPath: '/opt/skipper/bin/skipper.js', port: 4317, logDir: '/tmp/logs', host: '0.0.0.0' });
+  assert.match(plist, /<string>--port<\/string>\s*<string>4317<\/string>\s*<string>--host<\/string>\s*<string>0\.0\.0\.0<\/string>/);
+  assert.doesNotMatch(launchdPlist({ nodePath: 'n', scriptPath: 's', port: 1, logDir: '/l' }), /--host/);
+  assert.match(systemdUnit({ nodePath: '/usr/bin/node', scriptPath: '/s.js', port: 4317, host: '0.0.0.0' }), /ExecStart=\/usr\/bin\/node \/s\.js --port 4317 --host 0\.0\.0\.0/);
+});

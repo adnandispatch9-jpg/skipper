@@ -11,8 +11,8 @@ export const LABEL = 'dev.skipper';
 
 const xml = (value) => String(value).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[c]);
 
-export function launchdPlist({ nodePath, scriptPath, port, logDir }) {
-  const args = [nodePath, scriptPath, '--port', String(port)].map((a) => `    <string>${xml(a)}</string>`).join('\n');
+export function launchdPlist({ nodePath, scriptPath, port, logDir, host = null }) {
+  const args = [nodePath, scriptPath, '--port', String(port), ...(host ? ['--host', host] : [])].map((a) => `    <string>${xml(a)}</string>`).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -31,14 +31,14 @@ ${args}
 `;
 }
 
-export function systemdUnit({ nodePath, scriptPath, port }) {
+export function systemdUnit({ nodePath, scriptPath, port, host = null }) {
   const quote = (a) => (/[\s"\\]/.test(a) ? `"${a.replace(/(["\\])/g, '\\$1')}"` : a);
   return `[Unit]
 Description=Skipper dashboard for Claude Code
 After=network.target
 
 [Service]
-ExecStart=${[nodePath, scriptPath, '--port', String(port)].map(quote).join(' ')}
+ExecStart=${[nodePath, scriptPath, '--port', String(port), ...(host ? ['--host', host] : [])].map(quote).join(' ')}
 Restart=on-failure
 RestartSec=3
 
@@ -105,7 +105,7 @@ function paths(home = os.homedir()) {
 
 const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'pipe' }).toString();
 
-export async function installService({ nodePath, scriptPath, port = 4317, platform = process.platform }) {
+export async function installService({ nodePath, scriptPath, port = 4317, host = null, platform = process.platform }) {
   const p = paths();
   if (platform === 'darwin') {
     await fs.mkdir(path.dirname(p.plist), { recursive: true });
@@ -114,13 +114,13 @@ export async function installService({ nodePath, scriptPath, port = 4317, platfo
     try {
       run('launchctl', ['bootout', `${domain}/${LABEL}`]);
     } catch {}
-    await fs.writeFile(p.plist, launchdPlist({ nodePath, scriptPath, port, logDir: p.logDir }));
+    await fs.writeFile(p.plist, launchdPlist({ nodePath, scriptPath, port, host, logDir: p.logDir }));
     run('launchctl', ['bootstrap', domain, p.plist]);
     return { file: p.plist, url: `http://localhost:${port}`, logs: p.logDir };
   }
   if (platform === 'linux') {
     await fs.mkdir(path.dirname(p.unit), { recursive: true });
-    await fs.writeFile(p.unit, systemdUnit({ nodePath, scriptPath, port }));
+    await fs.writeFile(p.unit, systemdUnit({ nodePath, scriptPath, port, host }));
     run('systemctl', ['--user', 'daemon-reload']);
     run('systemctl', ['--user', 'enable', '--now', 'skipper.service']);
     return { file: p.unit, url: `http://localhost:${port}`, logs: 'journalctl --user -u skipper' };

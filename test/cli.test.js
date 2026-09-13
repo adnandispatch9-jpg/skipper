@@ -80,3 +80,11 @@ test('--log-dir writes startup output and errors to files', () => {
   assert.equal(r.stderr, '', 'nothing goes to the terminal');
   assert.match(readFileSync(path.join(logs, 'err.log'), 'utf8'), /Invalid port: nope/);
 });
+
+test('pair reset clears the saved network token', () => {
+  const { data, env } = sandbox();
+  mkdirSync(data, { recursive: true });
+  writeFileSync(path.join(data, 'config.json'), JSON.stringify({ networkToken: 'old-token-1234567890' }));
+  assert.match(run(['pair', 'reset'], env).stdout, /Network token cleared/);
+  assert.equal(JSON.parse(readFileSync(path.join(data, 'config.json'), 'utf8')).networkToken, null);
+});

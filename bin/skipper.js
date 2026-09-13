@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import os from 'node:os';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { readFileSync, rmSync, existsSync, mkdirSync, appendFileSync } from 'node:fs';
@@ -21,9 +22,12 @@ Usage: skipper [options]
        skipper hooks status
        skipper hooks native on|off  System notifications for permission prompts, even with no dashboard open
        skipper service install  Keep Skipper running in the background (macOS, Linux, Windows)
+                                Add --host 0.0.0.0 to reach it from the iPhone app on your Wi-Fi
        skipper service uninstall
        skipper service status
        skipper doctor           Check that everything is set up and working
+       skipper pair reset       New network token; paired phones must scan again
+       skipper voice setup      Turn on Uzbek voice (Azure AI Speech, free tier)
 
 Options:
   -p, --port <n>         Port to listen on (default 4317, or $PORT)
@@ -88,6 +92,14 @@ if (argv[0] === 'mcp') {
   const { serveStdio } = await import('../src/mcp.js');
   serveStdio();
   await new Promise(() => {});
+}
+
+// Forget the network token: every paired phone has to scan the new code.
+if (argv[0] === 'pair' && argv[1] === 'reset') {
+  const { writeConfig } = await import('../src/hooks.js');
+  await writeConfig(defaultDataDir(), { networkToken: null });
+  console.log('Network token cleared. Restart Skipper and pair your phone again.');
+  process.exit(0);
 }
 
 // Cloud voice for Uzbek (Azure AI Speech, free tier). The key is read from stdin so it never lands in shell history.
@@ -182,7 +194,10 @@ if (argv[0] === 'service') {
       const portIndex = argv.indexOf('--port');
       const port = portIndex > -1 ? Number(argv[portIndex + 1]) : 4317;
       if (!Number.isInteger(port) || port < 1 || port > 65535) fail('Invalid --port');
-      const result = await installService({ nodePath: stableNode(), scriptPath, port });
+      const hostIndex = argv.indexOf('--host');
+      const host = hostIndex > -1 ? argv[hostIndex + 1] : null;
+      if (host !== null && !/^[0-9a-fA-F:.]+$/.test(host || '')) fail('Invalid --host');
+      const result = await installService({ nodePath: stableNode(), scriptPath, port, host });
       // The first scan of a large history can take a few seconds; wait until it answers.
       let ready = false;
       for (let i = 0; i < 40 && !ready; i++) {
@@ -273,6 +288,18 @@ const claudeDir = opts.demo
   ? await writeDemo(path.join(os.tmpdir(), `skipper-demo-${process.pid}`))
   : opts.claudeDir ? path.resolve(expandHome(opts.claudeDir)) : defaultClaudeDir();
 
+// On the network the token is kept in ~/.skipper/config.json, so paired phones keep working across restarts.
+let token = process.env.SKIPPER_TOKEN || null;
+if (!token && !isLoopback(host) && !opts.demo) {
+  const { readConfig, writeConfig } = await import('../src/hooks.js');
+  const dataDir = opts.dataDir ? path.resolve(expandHome(opts.dataDir)) : defaultDataDir();
+  token = (await readConfig(dataDir)).networkToken;
+  if (typeof token !== 'string' || token.length < 16) {
+    token = crypto.randomBytes(18).toString('base64url');
+    await writeConfig(dataDir, { networkToken: token });
+  }
+}
+
 let app;
 try {
   app = await startServer({
@@ -280,7 +307,7 @@ try {
     dataDir: opts.demo ? path.join(claudeDir, '.skipper') : opts.dataDir ? path.resolve(expandHome(opts.dataDir)) : defaultDataDir(),
     host,
     port,
-    token: process.env.SKIPPER_TOKEN || null,
+    token,
     readOnly: Boolean(opts.readOnly),
     claudeBin: opts.demo ? null : process.env.SKIPPER_CLAUDE_BIN || 'claude',
   });
