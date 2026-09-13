@@ -30,10 +30,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
         </button>
         <div class="menu notify-menu" id="notify-menu" role="menu" aria-label="Alerts" hidden>
-          <button type="button" role="menuitemcheckbox" data-setting="sound" aria-checked="false">Play a sound</button>
-          <button type="button" role="menuitemcheckbox" data-setting="desktop" aria-checked="false">Desktop notifications</button>
-          <button type="button" role="menuitem" data-setting="test">Test alert</button>
-          <p class="menu-note" id="hooks-note"></p>
+          <button type="button" role="menuitemcheckbox" data-setting="sound" aria-checked="false"><span class="setting-text"><b>Sound</b><small>Chime when a session needs you</small></span><i class="switch" aria-hidden="true"></i></button>
+          <button type="button" role="menuitemcheckbox" data-setting="desktop" aria-checked="false"><span class="setting-text"><b>Desktop notifications</b><small>Even when this tab is hidden</small></span><i class="switch" aria-hidden="true"></i></button>
+          <button type="button" role="menuitemcheckbox" data-setting="turns" aria-checked="false"><span class="setting-text"><b>When Claude finishes a turn</b><small>Softer chime; loops stay quiet</small></span><i class="switch" aria-hidden="true"></i></button>
+          <div class="menu-foot"><i class="dot" id="hooks-dot"></i><span id="hooks-note"></span><button type="button" class="btn small" data-setting="test">Test</button></div>
         </div>
       </div>
       <div class="menu-wrap">

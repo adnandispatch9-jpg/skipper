@@ -11,6 +11,7 @@ const state = {
   filter: 'active',
   query: '',
   sound: false,
+  turns: true,
   desktop: false,
   hooks: null,
   lastAlert: {},
@@ -63,6 +64,7 @@ const ICONS = {
   edit: 'M4 20h4L19 9l-4-4L4 16ZM13.5 6.5l4 4',
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
   send: 'M4 12 20 4l-6 16-3-7Z',
+  bell: 'M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15ZM10 20a2 2 0 0 0 4 0',
 };
 
 function icon(name) {
@@ -234,10 +236,22 @@ function alertUser({ id, kind, title, body }) {
   if (kind === 'done') state.lastAlert[`${id}:waiting`] = Date.now();
 
   chime(kind);
-  const toast = h('div', { class: `toast ${kind === 'permission' ? 'urgent' : ''}`, role: kind === 'permission' ? 'alert' : 'status' },
-    id ? h('a', { href: `#/s/${id}` }, h('b', {}, title), body ? h('span', {}, body) : null) : h('span', {}, title, body ? ` ${body}` : ''));
+  const sessionId = id && /^[0-9a-f-]{36}/i.test(id) ? id.slice(0, 36) : null;
+  const toastIcon = { permission: 'shield', question: 'reply', waiting: 'reply', done: kind === 'done' && id?.endsWith('-agents') ? 'bot' : 'check' }[kind] || 'bell';
+  const toast = h('div', { class: `toast ${kind}`, role: kind === 'permission' ? 'alert' : 'status' },
+    h('span', { class: 'toast-icon' }, icon(toastIcon)),
+    h('div', { class: 'toast-body' },
+      h('b', {}, title),
+      body ? h('span', { class: kind === 'permission' && /:\s/.test(body) ? 'toast-command' : '' }, kind === 'permission' && /:\s/.test(body) ? body.replace(/^.*?:\s*/, '') : body) : null,
+      h('div', { class: 'toast-actions' },
+        sessionId ? h('a', { class: 'btn small', href: `#/s/${sessionId}` }, 'Open session') : null,
+        h('button', { class: 'btn small ghost', type: 'button', dataset: { dismiss: '1' } }, 'Dismiss'))),
+  );
+  toast.addEventListener('click', (event) => {
+    if (event.target.closest('[data-dismiss], a')) toast.remove();
+  });
   $('#toasts').append(toast);
-  setTimeout(() => toast.remove(), kind === 'permission' ? 15000 : 7000);
+  setTimeout(() => toast.remove(), kind === 'permission' ? 20000 : 7000);
 
   const showDesktop = state.desktop && 'Notification' in window && Notification.permission === 'granted' && (document.hidden || kind === 'permission');
   if (showDesktop) {
@@ -255,7 +269,12 @@ function onHookAlert(event) {
   if (event.kind === 'permission') alertUser({ id: event.sessionId, kind: 'permission', title: `Permission needed: ${title}`, body: event.message || 'Claude is waiting for your approval.' });
   else if (event.kind === 'question') alertUser({ id: event.sessionId, kind: 'question', title: `Question from Claude: ${title}`, body: event.message });
   else if (event.kind === 'idle') alertUser({ id: event.sessionId, kind: 'waiting', title: `Needs you: ${title}`, body: event.message });
-  else if (event.kind === 'done') alertUser({ id: event.sessionId, kind: 'done', title: `Finished: ${title}`, body: 'Claude is waiting for your next message.' });
+  else if (event.kind === 'done') {
+    const session = state.sessions.find((s) => s.id === event.sessionId);
+    // A /loop that just scheduled its next wakeup is not waiting for you.
+    if (!state.turns || session?.state === 'sleeping' || session?.loop) return;
+    alertUser({ id: event.sessionId, kind: 'done', title: `Finished: ${title}`, body: 'Claude is waiting for your next message.' });
+  }
   else alertUser({ id: event.sessionId, kind: 'waiting', title, body: event.message });
 }
 
@@ -268,7 +287,7 @@ function notifyChanges(next) {
     if (!old) continue;
     if (s.state === 'permission' && old.state !== 'permission') {
       alertUser({ id: s.id, kind: 'permission', title: `Permission needed: ${s.title}`, body: s.attention?.message || 'Claude is waiting for your approval.' });
-    } else if (s.state === 'waiting' && old.state === 'working') {
+    } else if (s.state === 'waiting' && old.state === 'working' && state.turns) {
       alertUser({ id: s.id, kind: 'waiting', title: `Needs you: ${s.title}`, body: 'Claude finished and is waiting for you.' });
     } else if (s.agentsRunning < old.agentsRunning && s.live) {
       alertUser({ id: `${s.id}-agents`, kind: 'done', title: `Subagent finished in ${s.title}` });
@@ -279,15 +298,16 @@ function notifyChanges(next) {
 function renderHooksNote() {
   const note = $('#hooks-note');
   if (!note) return;
+  $('#hooks-dot')?.classList.toggle('working', Boolean(state.hooks?.installed));
   if (state.hooks?.installed) {
-    note.textContent = 'Claude Code hooks are on: permission prompts alert you instantly.';
+    note.textContent = 'Claude Code hooks connected';
   } else {
-    note.replaceChildren('For instant permission-prompt alerts, run ', h('code', {}, 'skipper hooks install'), '.');
+    note.replaceChildren('Run ', h('code', {}, 'skipper hooks install'), ' for instant alerts');
   }
 }
 
 function syncNotifyMenu() {
-  for (const item of document.querySelectorAll('[data-setting="sound"], [data-setting="desktop"]')) {
+  for (const item of document.querySelectorAll('[data-setting="sound"], [data-setting="desktop"], [data-setting="turns"]')) {
     item.setAttribute('aria-checked', String(Boolean(state[item.dataset.setting])));
   }
   $('#notify-btn').setAttribute('aria-pressed', String(state.sound || state.desktop));
@@ -985,6 +1005,7 @@ function init() {
   wireActions();
 
   state.sound = store.get('skipper.sound') !== '0';
+  state.turns = store.get('skipper.turns') !== '0';
   state.desktop = store.get('skipper.desktop') === '1' && 'Notification' in window && Notification.permission === 'granted';
   syncNotifyMenu();
   $('#notify-btn').addEventListener('click', (event) => {
@@ -1006,6 +1027,9 @@ function init() {
       if (!allowed && !state.desktop) toast('Notifications are blocked for this site. Allow them in your browser settings.', 'error');
       state.desktop = !state.desktop && allowed;
       store.set('skipper.desktop', state.desktop ? '1' : '0');
+    } else if (item.dataset.setting === 'turns') {
+      state.turns = !state.turns;
+      store.set('skipper.turns', state.turns ? '1' : '0');
     } else if (item.dataset.setting === 'test') {
       state.lastAlert = {};
       alertUser({ id: null, kind: 'permission', title: 'Permission needed: test alert', body: 'This is what a permission prompt sounds like.' });
