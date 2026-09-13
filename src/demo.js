@@ -23,9 +23,9 @@ function builder(sessionId, cwd, branch, start) {
     wait(ms) { t += ms; return api; },
     meta(record) { records.push({ ...record, sessionId }); return api; },
     prompt(text) { records.push({ ...base(), type: 'user', message: { role: 'user', content: text } }); return api; },
-    say(text) { records.push({ ...base(), type: 'assistant', message: { model: 'claude-opus-5', role: 'assistant', content: [{ type: 'text', text }] } }); return api; },
+    say(text) { records.push({ ...base(), type: 'assistant', message: { id: `msg_${n}`, model: 'claude-opus-5', role: 'assistant', content: [{ type: 'text', text }], usage: usageFor(sessionId, n) } }); return api; },
     tool(name, input, id = `toolu_${uuid(`${sessionId}-${n}`).replace(/-/g, '').slice(0, 24)}`) {
-      records.push({ ...base(), type: 'assistant', message: { model: 'claude-opus-5', role: 'assistant', content: [{ type: 'tool_use', id, name, input }] } });
+      records.push({ ...base(), type: 'assistant', message: { id: `msg_${n}`, model: 'claude-opus-5', role: 'assistant', content: [{ type: 'tool_use', id, name, input }], usage: usageFor(sessionId, n) } });
       return id;
     },
     result(id, text = 'ok') { records.push({ ...base(), type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: text }] } }); return api; },
@@ -36,6 +36,11 @@ function builder(sessionId, cwd, branch, start) {
     turnEnd() { records.push({ ...base(), type: 'system', subtype: 'turn_duration', durationMs: 42000 }); return api; },
   };
   return api;
+}
+
+function usageFor(seed, n) {
+  const h = parseInt(crypto.createHash('sha1').update(`${seed}:${n}`).digest('hex').slice(0, 8), 16);
+  return { input_tokens: 40 + (h % 400), cache_read_input_tokens: 20_000 + (h % 60_000), cache_creation_input_tokens: h % 3_000, output_tokens: 300 + (h % 4_500) };
 }
 
 const todos = (items) => ({ todos: items.map(([status, content, activeForm]) => ({ status, content, activeForm: activeForm || content })) });
@@ -55,7 +60,8 @@ export async function writeDemo(dir, { pid = process.pid, now = Date.now() } = {
       for (const [agentId, meta, activeAgo] of extras.subagents) {
         await fs.writeFile(path.join(sub, `agent-${agentId}.meta.json`), JSON.stringify(meta));
         const log = path.join(sub, `agent-${agentId}.jsonl`);
-        await fs.writeFile(log, '{}\n');
+        const lines = Array.from({ length: 12 }, (_, i) => JSON.stringify({ isSidechain: true, type: 'assistant', timestamp: new Date(now - 30 * MIN + i * MIN).toISOString(), message: { id: `sub_${agentId}_${i}`, model: 'claude-sonnet-5', content: [], usage: usageFor(agentId, i) } }));
+        await fs.writeFile(log, `${lines.join('\n')}\n`);
         const when = new Date(now - activeAgo);
         await fs.utimes(log, when, when);
       }
@@ -214,6 +220,33 @@ export async function writeDemo(dir, { pid = process.pid, now = Date.now() } = {
     b.turnEnd();
     b.meta({ type: 'cost-state', totalCostUSD: cost, totalLinesAdded: Math.round(cost * 90), totalLinesRemoved: Math.round(cost * 30) });
     if (pr) b.meta({ type: 'pr-link', prNumber: number, prUrl: pr, prRepository: repo });
+    await save(project, id, b);
+  }
+
+  // Two weeks of finished work so the Usage page has history.
+  const past = [
+    ['storefront', 'Refactor checkout state machine', 13, 22, 'claude-opus-5'],
+    ['payments-api', 'Retry queue load test', 12, 14, 'claude-sonnet-5'],
+    ['field-app', 'Offline cache spike', 11, 18, 'claude-opus-5'],
+    ['storefront', 'Product page performance pass', 10, 9, 'claude-sonnet-5'],
+    ['docs-site', 'Docs theme audit', 8, 7, 'claude-haiku-4-5'],
+    ['field-app', 'Sync conflict model', 6, 26, 'claude-opus-5'],
+    ['payments-api', 'Refund webhooks', 5, 20, 'claude-opus-5'],
+    ['storefront', 'Cart analytics events', 4, 24, 'claude-opus-5'],
+    ['infra', 'Terraform state cleanup', 3, 12, 'claude-sonnet-5'],
+    ['field-app', 'Background sync design', 2, 30, 'claude-opus-5'],
+  ];
+  for (const [project, title, daysAgo, responses, model] of past) {
+    const id = uuid(`past-${title}`);
+    const begin = now - daysAgo * 86_400_000;
+    const b = builder(id, `${home}/${project}`, 'main', begin);
+    b.meta({ type: 'custom-title', customTitle: title });
+    b.prompt(title);
+    for (let i = 0; i < responses; i++) {
+      b.at(begin + i * 3 * MIN);
+      b.records.push({ sessionId: id, cwd: `${home}/${project}`, gitBranch: 'main', timestamp: new Date(begin + i * 3 * MIN).toISOString(), type: 'assistant', isSidechain: false, message: { id: `past_${i}`, model, role: 'assistant', content: [{ type: 'text', text: `Step ${i + 1} done.` }], usage: usageFor(id, i) } });
+    }
+    b.turnEnd();
     await save(project, id, b);
   }
 

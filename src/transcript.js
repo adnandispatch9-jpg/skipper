@@ -35,6 +35,7 @@ export function createSummary(sessionId) {
     prs: new Map(),
     artifacts: new Map(),
     cost: null,
+    usage: new Map(), // response id -> token counts
   };
 }
 
@@ -160,6 +161,34 @@ function applyUser(s, record, at) {
   }
 }
 
+// Claude Code repeats a response's usage on every content-block record, so
+// usage is keyed by response id and each response counts once.
+export function applyUsage(usage, record) {
+  if (record?.type !== 'assistant') return;
+  const message = record.message || {};
+  const u = message.usage;
+  const id = message.id || record.requestId;
+  if (!u || !id) return;
+  const at = toMs(record.timestamp);
+  const next = {
+    at,
+    model: typeof message.model === 'string' && !message.model.startsWith('<') ? message.model : null,
+    input: Number(u.input_tokens) || 0,
+    cacheRead: Number(u.cache_read_input_tokens) || 0,
+    cacheWrite: Number(u.cache_creation_input_tokens) || 0,
+    output: Number(u.output_tokens) || 0,
+  };
+  const prev = usage.get(id);
+  if (!prev) {
+    usage.set(id, next);
+    return;
+  }
+  // Later records of the same response carry the final counts.
+  for (const key of ['input', 'cacheRead', 'cacheWrite', 'output']) prev[key] = Math.max(prev[key], next[key]);
+  prev.at ??= next.at;
+  prev.model ??= next.model;
+}
+
 export function applyRecord(s, record) {
   if (!record || typeof record !== 'object' || record.isSidechain) return;
   const at = toMs(record.timestamp);
@@ -216,6 +245,7 @@ export function applyRecord(s, record) {
       break;
     case 'assistant': {
       s.lastKind = 'activity';
+      applyUsage(s.usage, record);
       const message = record.message || {};
       if (message.model && !message.model.startsWith('<')) s.model = message.model;
       if (!Array.isArray(message.content)) break;

@@ -175,6 +175,10 @@ export async function startServer({
         const [file, type] = STATIC[url.pathname];
         return send(res, 200, await fs.readFile(path.join(PUBLIC_DIR, file)), type, { 'Cache-Control': 'no-cache' });
       }
+      if (url.pathname === '/api/usage') {
+        const days = [1, 7, 14, 30].includes(Number(url.searchParams.get('days'))) ? Number(url.searchParams.get('days')) : 14;
+        return json(res, 200, { now: Date.now(), ...store.usage({ days }) });
+      }
       if (url.pathname === '/api/activity') {
         const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 100, 1), 300);
         return json(res, 200, { now: Date.now(), items: store.activity({ limit }) });

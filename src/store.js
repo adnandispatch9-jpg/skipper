@@ -3,7 +3,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { createSummary, applyRecord, sessionTitle } from './transcript.js';
+import { createSummary, applyRecord, applyUsage, sessionTitle } from './transcript.js';
 
 const CHUNK = 1 << 20;
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -67,6 +67,7 @@ export class Store {
     this.teams = new Map();
     this.signature = '';
     this.workflowCache = new Map();
+    this.subagentFiles = new Map(); // subagent transcript -> { usage }
   }
 
   async refresh() {
@@ -98,16 +99,21 @@ export class Store {
   }
 
   async #readTranscript(file, id) {
+    await this.#readIncremental(this.files, file, () => ({ summary: createSummary(id) }), (entry, record) => applyRecord(entry.summary, record));
+  }
+
+  // Reads only the bytes appended since last time, one JSON record per line.
+  async #readIncremental(cache, file, init, onRecord) {
     let stat;
     try {
       stat = await fs.stat(file);
     } catch {
       return;
     }
-    let entry = this.files.get(file);
+    let entry = cache.get(file);
     if (!entry || stat.size < entry.offset) {
-      entry = { offset: 0, rest: '', summary: createSummary(id), size: 0, mtimeMs: 0 };
-      this.files.set(file, entry);
+      entry = { offset: 0, rest: '', size: 0, mtimeMs: 0, ...init() };
+      cache.set(file, entry);
     }
     if (stat.size === entry.offset) return;
 
@@ -123,7 +129,7 @@ export class Store {
         for (const line of lines) {
           if (!line) continue;
           try {
-            applyRecord(entry.summary, JSON.parse(line));
+            onRecord(entry, JSON.parse(line));
           } catch {
             // Partial or malformed line: skip it.
           }
@@ -143,9 +149,11 @@ export class Store {
       const meta = await readJson(path.join(dir, 'subagents', file.name));
       if (!meta) continue;
       let lastActiveAt = null;
+      const log = path.join(dir, 'subagents', file.name.replace('.meta.json', '.jsonl'));
       try {
-        lastActiveAt = (await fs.stat(path.join(dir, 'subagents', file.name.replace('.meta.json', '.jsonl')))).mtimeMs;
+        lastActiveAt = (await fs.stat(log)).mtimeMs;
       } catch {}
+      await this.#readIncremental(this.subagentFiles, log, () => ({ sessionId: id, usage: new Map() }), (entry, record) => applyUsage(entry.usage, record));
       extras.subagents.set(meta.toolUseId || file.name, {
         name: meta.name || null,
         description: meta.description || null,
@@ -441,6 +449,70 @@ export class Store {
       if (!this.live.has(s.id) && s.updatedAt) push(s.id, s.updatedAt, 'ended', 'Session ended', s.cost ? `$${s.cost.usd.toFixed(2)}` : null);
     }
     return items.sort((a, b) => b.at - a.at).slice(0, limit);
+  }
+
+  usage({ days = 14 } = {}) {
+    const dayMs = 86_400_000;
+    const today = new Date(this.now());
+    today.setHours(0, 0, 0, 0);
+    const start = today.getTime() - (days - 1) * dayMs;
+    const prevStart = start - days * dayMs;
+    const dayKey = (at) => {
+      const d = new Date(at);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const perDay = new Map();
+    for (let i = 0; i < days; i++) perDay.set(dayKey(start + i * dayMs + dayMs / 2), { day: dayKey(start + i * dayMs + dayMs / 2), output: 0, input: 0, byProject: {} });
+    const totals = { output: 0, input: 0, cacheRead: 0, cacheWrite: 0, subagentOutput: 0, previousOutput: 0, responses: 0 };
+    const byProject = new Map();
+    const byModel = new Map();
+    const family = (model) => (model?.match(/opus|sonnet|haiku|fable/i)?.[0].toLowerCase() ?? model ?? 'unknown');
+    const summaries = this.#summaries();
+    const projectOf = (id) => {
+      const s = summaries.get(id);
+      return s?.cwd ? path.basename(s.cwd) : 'unknown';
+    };
+    const count = (sessionId, u, subagent) => {
+      if (u.at == null) return;
+      if (u.at >= prevStart && u.at < start) totals.previousOutput += u.output;
+      if (u.at < start) return;
+      const input = u.input + u.cacheRead + u.cacheWrite;
+      totals.output += u.output;
+      totals.input += input;
+      totals.cacheRead += u.cacheRead;
+      totals.cacheWrite += u.cacheWrite;
+      totals.responses += 1;
+      if (subagent) totals.subagentOutput += u.output;
+      const project = projectOf(sessionId);
+      byProject.set(project, (byProject.get(project) || 0) + u.output);
+      const model = family(u.model);
+      byModel.set(model, (byModel.get(model) || 0) + u.output);
+      const bucket = perDay.get(dayKey(u.at));
+      if (bucket) {
+        bucket.output += u.output;
+        bucket.input += input;
+        bucket.byProject[project] = (bucket.byProject[project] || 0) + u.output;
+      }
+    };
+    for (const s of summaries.values()) for (const u of s.usage.values()) count(s.id, u, false);
+    for (const entry of this.subagentFiles.values()) for (const u of entry.usage.values()) count(entry.sessionId, u, true);
+
+    let recordedCost = 0;
+    let costSessions = 0;
+    for (const s of summaries.values()) {
+      if (s.cost && s.updatedAt >= start) {
+        recordedCost += s.cost.usd;
+        costSessions += 1;
+      }
+    }
+    const ranked = (map) => [...map.entries()].map(([name, output]) => ({ name, output })).filter((r) => r.output > 0).sort((a, b) => b.output - a.output);
+    return {
+      days,
+      totals: { ...totals, recordedCost, costSessions },
+      perDay: [...perDay.values()],
+      byProject: ranked(byProject),
+      byModel: ranked(byModel),
+    };
   }
 
   get(id) {

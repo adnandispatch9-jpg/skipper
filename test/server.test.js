@@ -240,3 +240,22 @@ test('message sends are rate limited', async () => {
     await demo.close();
   }
 });
+
+test('usage counts each response once, includes subagents, and groups by day, project and model', async () => {
+  const { applyUsage } = await import('../src/transcript.js');
+  const usage = new Map();
+  const rec = (output) => ({ type: 'assistant', timestamp: new Date().toISOString(), message: { id: 'msg_1', model: 'claude-opus-5', usage: { input_tokens: 10, output_tokens: output } } });
+  applyUsage(usage, rec(5));
+  applyUsage(usage, rec(120));
+  applyUsage(usage, rec(120));
+  assert.equal(usage.size, 1);
+  assert.equal(usage.get('msg_1').output, 120);
+
+  const res = await (await fetch(`${base}/api/usage?days=14`)).json();
+  assert.equal(res.perDay.length, 14);
+  assert.ok(res.totals.output > 0 && res.totals.subagentOutput > 0, 'subagents counted');
+  assert.equal(res.perDay.reduce((sum, d) => sum + d.output, 0), res.totals.output);
+  assert.deepEqual(res.byModel.map((m) => m.name).sort(), ['haiku', 'opus', 'sonnet']);
+  assert.ok(res.byProject.find((p) => p.name === 'storefront'));
+  assert.equal((await (await fetch(`${base}/api/usage?days=999`)).json()).days, 14, 'unknown ranges fall back to 14');
+});
