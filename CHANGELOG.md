@@ -1,0 +1,23 @@
+# Changelog
+
+## 0.2.0 (2026-09-13)
+
+### Added
+- **Permission alerts with sound.** `skipper hooks install` connects Claude Code's `Notification` and `Stop` hooks. Sessions waiting for permission move to a **Needs permission** state, with a chime, a desktop notification and the exact command.
+- **Activity feed.** What happened while you were away: permission prompts, finished turns, loop ticks, subagents, pull requests, artifacts, workflow runs and ended sessions. Unread markers, filters, and loop ticks merged per session.
+- **Attention queue.** The overview ranks every session that needs you, permission prompts first, with the next action.
+- **Phone layout.** Bottom tab bar (Needs you, Activity, Live, History), a permission banner with a copy button, and a message box pinned to the bottom.
+- **Sidebar** with Live and History tabs and a project filter.
+- Session page shows what the running tool is working on (file or command).
+- `npm run screenshots` regenerates README screenshots from demo data.
+
+### Fixed
+- Loops no longer flicker into "Needs you" while their wakeup runs a few seconds late.
+- Loops no longer chime every time they go back to sleep.
+- Times between 45 and 59 seconds showed as "0m ago".
+- The top bar overflowed on narrow phones.
+- The hook event log is kept to its most recent 1000 events.
+
+## 0.1.0 (2026-09-13)
+
+- First release: a live, local dashboard for Claude Code sessions, todo lists, task lists, subagents, loops, workflows and PRs, with messaging, notes, task editing, six themes and `--demo` mode.

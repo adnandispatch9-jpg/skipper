@@ -1,17 +1,18 @@
 {
   "name": "skipper",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Mission control for Claude Code: a live local dashboard for sessions, subagents, /loop, todo lists and tasks, with messaging, notes and task editing.",
   "type": "module",
   "bin": {
     "skipper": "bin/skipper.js"
   },
   "files": [
-    "bin",
-    "src",
-    "public",
+    "CHANGELOG.md",
+    "LICENSE",
     "README.md",
-    "LICENSE"
+    "bin",
+    "public",
+    "src"
   ],
   "scripts": {
     "start": "node bin/skipper.js",
