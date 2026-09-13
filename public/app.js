@@ -10,6 +10,9 @@ const state = {
   claudeDir: '',
   filter: 'live',
   project: null,
+  activity: [],
+  activityFilter: 'all',
+  activitySeen: 0,
   query: '',
   sound: false,
   turns: true,
@@ -154,6 +157,7 @@ async function load() {
   renderHooksNote();
   notifyChanges(data.sessions);
   state.sessions = data.sessions;
+  state.activity = (await getJson('/api/activity?limit=150').catch(() => null))?.items ?? state.activity;
   const id = route().id;
   if (id) {
     const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, { cache: 'no-store' });
@@ -333,6 +337,7 @@ function route() {
   const match = hash.match(/^#\/s\/([0-9a-f-]{36})$/i);
   if (match) return { name: 'session', id: match[1] };
   if (hash === '#/sessions') return { name: 'list' };
+  if (hash === '#/activity') return { name: 'activity' };
   return { name: 'overview' };
 }
 
@@ -511,6 +516,92 @@ function sessionCard(s) {
   );
 }
 
+const ACTIVITY_FILTERS = [
+  ['all', 'All', null],
+  ['needs', 'Needs you', ['permission', 'question', 'waiting', 'turn']],
+  ['agents', 'Agents', ['agent-start', 'agent-done', 'agent-failed', 'workflow']],
+  ['prs', 'PRs', ['pr', 'artifact']],
+  ['loops', 'Loops', ['loop']],
+];
+
+const ACTIVITY_STYLE = {
+  permission: ['permission', 'shield'],
+  question: ['waiting', 'reply'],
+  waiting: ['waiting', 'reply'],
+  turn: ['waiting', 'reply'],
+  loop: ['sleeping', 'loop'],
+  'agent-start': ['accent', 'bot'],
+  'agent-done': ['working', 'bot'],
+  'agent-failed': ['danger', 'bot'],
+  workflow: ['working', 'flow'],
+  pr: ['accent', 'pr'],
+  artifact: ['accent', 'link'],
+  ended: ['ended', 'check'],
+};
+
+// Consecutive loop ticks of one session collapse into a single row.
+function groupActivity(items) {
+  const out = [];
+  for (const item of items) {
+    const prev = out[out.length - 1];
+    if (prev && item.kind === 'loop' && prev.kind === 'loop' && prev.sessionId === item.sessionId) {
+      prev.count += 1;
+      prev.firstAt = item.at;
+      continue;
+    }
+    out.push({ ...item, count: 1, firstAt: item.at });
+  }
+  return out;
+}
+
+function dayBucket(at) {
+  const t = now();
+  if (t - at < 3_600_000) return 'Last hour';
+  const today = new Date(t).setHours(0, 0, 0, 0);
+  if (at >= today) return 'Earlier today';
+  if (at >= today - DAY) return 'Yesterday';
+  return 'Earlier';
+}
+
+function renderActivity({ limit = 40 } = {}) {
+  const filter = ACTIVITY_FILTERS.find(([id]) => id === state.activityFilter) || ACTIVITY_FILTERS[0];
+  const items = groupActivity(state.activity.filter((i) => (!filter[2] || filter[2].includes(i.kind)) && (!state.project || i.project === state.project))).slice(0, limit);
+  const unread = state.activity.filter((i) => i.at > state.activitySeen).length;
+  const rows = [];
+  let bucket = null;
+  for (const item of items) {
+    const b = dayBucket(item.at);
+    if (b !== bucket) {
+      bucket = b;
+      rows.push(h('div', { class: 'group-label activity-group' }, h('span', {}, b)));
+    }
+    const [tone, iconName] = ACTIVITY_STYLE[item.kind] || ['ended', 'check'];
+    const text = item.count > 1 ? `Loop ran ${item.count} times` : item.text;
+    rows.push(h('a', { class: `activity-item${item.at > state.activitySeen ? ' unread' : ''}`, href: `#/s/${item.sessionId}` },
+      h('span', { class: `activity-icon tone-${tone}` }, icon(iconName)),
+      h('span', { class: 'activity-body' },
+        h('span', { class: `activity-kind tone-${tone}` }, text),
+        h('span', { class: 'activity-title' }, item.title),
+        item.detail ? h('span', { class: `activity-detail${item.kind === 'permission' && splitAsk(item.detail).command ? ' mono' : ''}` }, item.kind === 'permission' ? splitAsk(item.detail).command || item.detail : plain(item.detail)) : null),
+      h('span', { class: 'activity-when' }, relTime(item.at), item.at > state.activitySeen ? h('i', { class: 'unread-dot', 'aria-label': 'new' }) : null)));
+  }
+  return h('section', { class: 'activity' },
+    h('div', { class: 'activity-head' },
+      h('div', {},
+        h('h2', {}, 'Activity'),
+        h('p', { class: 'muted' }, unread ? `${unread} new since you last looked` : 'You are all caught up')),
+      unread ? h('button', { class: 'btn small', type: 'button', dataset: { activitySeen: '1' } }, 'Mark seen') : null),
+    h('div', { class: 'chips', role: 'tablist', 'aria-label': 'Activity filter' },
+      ACTIVITY_FILTERS.map(([id, label]) => h('button', { type: 'button', role: 'tab', class: 'filter-chip', 'aria-selected': String(filter[0] === id), dataset: { activityFilter: id } }, label))),
+    rows.length ? h('div', { class: 'activity-list' }, rows) : h('p', { class: 'muted empty-activity' }, 'Nothing here yet. Permission prompts, finished turns, subagents and PRs will show up as they happen.'),
+  );
+}
+
+function renderActivityPage() {
+  renderPulse();
+  return h('div', { class: 'activity-page' }, renderActivity({ limit: 120 }));
+}
+
 function renderOverview() {
   const counts = renderPulse();
   if (!state.sessions.length) {
@@ -528,7 +619,7 @@ function renderOverview() {
   const nextWake = live.map((s) => s.loop?.wakeAt).filter((t) => t > now()).sort()[0];
   const needs = queue.length;
 
-  return h('div', { class: 'overview' },
+  return h('div', { class: 'overview-layout' }, h('div', { class: 'overview' },
     h('div', { class: 'page-head' },
       h('div', {},
         h('h1', {}, needs ? `${needs} session${needs > 1 ? 's' : ''} need${needs > 1 ? '' : 's'} you` : live.length ? 'Everything is moving' : 'All quiet'),
@@ -560,8 +651,9 @@ function renderOverview() {
         ),
       )),
     ) : null,
-  );
+  ), h('aside', { class: 'activity-rail', 'aria-label': 'Activity' }, renderActivity({ limit: 40 })));
 }
+
 
 function panel(title, aside, ...body) {
   return h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, title), aside), ...body);
@@ -649,13 +741,15 @@ function renderTabbar() {
   const r = route();
   const live = state.sessions.filter((s) => s.live);
   const needs = live.filter((s) => s.state === 'permission' || s.state === 'waiting').length;
-  const active = r.name === 'overview' ? 'needs' : r.name === 'list' ? state.filter : null;
+  const active = r.name === 'overview' ? 'needs' : r.name === 'activity' ? 'activity' : r.name === 'list' ? state.filter : null;
   const tab = (id, href, label, badge, dot) =>
     h('a', { class: 'tab', href, 'aria-current': active === id ? 'page' : null, dataset: { tab: id } },
       badge ? h('span', { class: `tab-badge ${dot}` }, badge) : h('i', { class: `dot ${dot}` }),
       h('span', {}, label));
+  const unread = state.activity.filter((i) => i.at > state.activitySeen).length;
   $('#tabbar').replaceChildren(
     tab('needs', '#/', 'Needs you', needs, needs ? (live.some((s) => s.state === 'permission') ? 'permission' : 'waiting') : 'working'),
+    tab('activity', '#/activity', 'Activity', unread, 'accent'),
     tab('live', '#/sessions', 'Live', null, 'working'),
     tab('history', '#/sessions', 'History', null, 'ended'),
   );
@@ -847,7 +941,7 @@ function render() {
   }
   state.renderPending = false;
   const keepScroll = main.dataset.view === (r.id || r.name) ? main.scrollTop : 0;
-  main.replaceChildren(r.name === 'session' ? renderDetail(state.detail) : renderOverview());
+  main.replaceChildren(r.name === 'session' ? renderDetail(state.detail) : r.name === 'activity' ? renderActivityPage() : renderOverview());
   if (r.name === 'list') renderPulse();
   main.dataset.view = r.id || r.name;
   main.scrollTop = keepScroll;
@@ -1028,6 +1122,19 @@ function focusComposer() {
 function wireActions() {
   const main = $('#main');
   main.addEventListener('click', (event) => {
+    const chip = event.target.closest('[data-activity-filter]');
+    if (chip) {
+      state.activityFilter = chip.dataset.activityFilter;
+      store.set('skipper.activityFilter', state.activityFilter);
+      render();
+      return;
+    }
+    if (event.target.closest('[data-activity-seen]')) {
+      state.activitySeen = now();
+      store.set('skipper.activitySeen', String(state.activitySeen));
+      render();
+      return;
+    }
     const el = event.target.closest('[data-action]');
     if (!el || el.tagName === 'FORM') return;
     const action = el.dataset.action;
@@ -1106,7 +1213,7 @@ function init() {
   wireActions();
   $('#tabbar').addEventListener('click', (event) => {
     const tab = event.target.closest('[data-tab]');
-    if (!tab || tab.dataset.tab === 'needs') return;
+    if (!tab || tab.dataset.tab === 'needs' || tab.dataset.tab === 'activity') return;
     state.filter = tab.dataset.tab;
     store.set('skipper.filter', state.filter);
     if (location.hash === '#/sessions') render();
@@ -1154,6 +1261,13 @@ function init() {
   }, { once: true });
 
   state.filter = store.get('skipper.filter') === 'history' ? 'history' : 'live';
+  state.activitySeen = Number(store.get('skipper.activitySeen')) || 0;
+  if (!state.activitySeen) {
+    // First visit: only the last hour counts as new, not the whole week.
+    state.activitySeen = Date.now() - 3_600_000;
+    store.set('skipper.activitySeen', String(state.activitySeen));
+  }
+  state.activityFilter = store.get('skipper.activityFilter') || 'all';
   $('#sidebar').addEventListener('click', (event) => {
     const tab = event.target.closest('[data-filter]');
     const project = event.target.closest('[data-project]');

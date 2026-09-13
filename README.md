@@ -25,6 +25,7 @@ Running several Claude Code agents at once is powerful and hard to follow. One t
 - **Subagents.** Background agents with name, model, worktree branch, and when each one last did something.
 - **`/loop` countdowns.** See when a self-paced loop wakes next and why it went to sleep.
 - **Workflows, PRs and artifacts.** Multi-agent workflow runs, linked pull requests and published artifacts, one click away.
+- **Activity feed.** What happened while you were away, across every session: permission prompts, finished turns, loop ticks, subagents, PRs and workflow runs, with unread markers and filters.
 - **Cost and history.** Spend, turns and lines changed for every session, searchable across all your projects.
 - **Permission alerts with sound.** The moment Claude asks to run a command or edit a file, Skipper plays a chime, shows a desktop notification and moves the session to **Needs permission**.
 
