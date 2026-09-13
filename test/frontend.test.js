@@ -14,7 +14,7 @@ test('app.js parses', () => {
 test('every locally named function that is called is defined', () => {
   const defined = new Set([...source.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => m[1]));
   for (const m of source.matchAll(/\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/g)) defined.add(m[1]);
-  const ours = /^(?:(?:render|queue|session|alert|toggle|sync|apply|focus|wire|run|notify|attention|composer|notes|plan|agents|workflows|loop|links|team)(?:[A-Z]\w*)?|panel|segments|metaItem|chime|confirmButton|load|reload|connect|route|matches|visibleSessions|progress|detailGrid|toast|api|ago|countdown|duration|plain|safeHref|toolName|tick|icon|h|setOffline|onHookAlert|hooksTip|formatAgo|formatCountdown|dayBucket|dayBucketAt|groupActivity|splitAsk|resumeCommand|formatTokens|niceScale|elapsedTime|relTimeBare)$/;
+  const ours = /^(?:(?:render|queue|session|alert|toggle|sync|apply|focus|wire|run|notify|attention|composer|notes|plan|agents|workflows|loop|links|team)(?:[A-Z]\w*)?|panel|segments|metaItem|chime|confirmButton|load|reload|connect|route|matches|visibleSessions|progress|detailGrid|toast|api|ago|countdown|duration|plain|safeHref|toolName|tick|icon|h|setOffline|onHookAlert|hooksTip|formatAgo|formatCountdown|dayBucket|dayBucketAt|groupActivity|splitAsk|resumeCommand|formatTokens|niceScale|elapsedTime|relTimeBare|quietLine|quietReason)$/;
   const missing = new Set();
   for (const m of source.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g)) {
     const name = m[1];
@@ -32,7 +32,7 @@ test('index.html references only elements app.js expects', () => {
 
 const helpers = (() => {
   const context = {};
-  vm.runInNewContext(`${logic}\n;globalThis.out = { formatTokens, niceScale, resumeCommand, formatAgo, formatCountdown, duration, safeHref, toolName, plain, splitAsk, dayBucketAt, groupActivity };`, context);
+  vm.runInNewContext(`${logic}\n;globalThis.out = { quietReason, formatTokens, niceScale, resumeCommand, formatAgo, formatCountdown, duration, safeHref, toolName, plain, splitAsk, dayBucketAt, groupActivity };`, context);
   return context.out;
 })();
 
@@ -96,4 +96,16 @@ test('chart scale rounds up to a readable maximum', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(helpers.niceScale(740_000))), { max: 1_000_000, ticks: [0, 500_000, 1_000_000] });
   assert.deepEqual(JSON.parse(JSON.stringify(helpers.niceScale(310))), { max: 400, ticks: [0, 200, 400] });
   assert.equal(helpers.niceScale(0).max, 1);
+});
+
+test('quiet sessions explain whether a tool is still running', () => {
+  const now = 1_000_000_000;
+  const base = { state: 'working', updatedAt: now - 6 * 60_000 };
+  assert.equal(helpers.quietReason({ ...base, updatedAt: now - 60_000 }, now), null, 'not quiet yet');
+  assert.equal(helpers.quietReason({ ...base, state: 'waiting' }, now), null, 'only working sessions');
+  const running = helpers.quietReason({ ...base, lastTool: { name: 'Bash', target: 'flutter test', at: base.updatedAt - 30_000, pending: true } }, now);
+  assert.equal(running.kind, 'tool');
+  assert.equal(running.tool, 'Bash');
+  const silent = helpers.quietReason({ ...base, lastTool: { name: 'Bash', at: base.updatedAt - 60_000, pending: false } }, now);
+  assert.equal(silent.kind, 'silent');
 });

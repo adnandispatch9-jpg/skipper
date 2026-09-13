@@ -81,3 +81,10 @@ test('slash commands and loop wake-ups start a turn without replacing the typed 
   assert.equal(s.lastPrompt, 'Build the thing');
   assert.equal(s.lastPromptAt, Date.parse(at(30)));
 });
+
+test('the last tool is pending until its result arrives', () => {
+  const s = fold([tool('Bash', { command: 'flutter test' }, 'b9')]);
+  assert.equal(s.lastTool.pending, true);
+  applyRecord(s, { type: 'user', timestamp: at(3), message: { content: [{ type: 'tool_result', tool_use_id: 'b9' }] } });
+  assert.equal(s.lastTool.pending, false);
+});

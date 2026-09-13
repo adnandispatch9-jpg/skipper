@@ -398,6 +398,7 @@ export class Store {
         current: current ? current.activeForm || current.content || current.subject : null,
         lastText: s.lastText ? s.lastText.slice(0, 240) : null,
         turnStartedAt: s.lastPromptAt ?? null,
+        lastTool: s.lastTool ? { name: s.lastTool.name, target: s.lastTool.target ?? null, at: s.lastTool.at, pending: Boolean(s.lastTool.pending) } : null,
         agentsRunning: agents.filter((a) => a.status === 'running').length,
         agentsTotal: agents.length,
         loop: live && loopSleeping(s.loop, s.lastPromptAt, this.now()) ? { wakeAt: s.loop.wakeAt, reason: s.loop.reason } : null,

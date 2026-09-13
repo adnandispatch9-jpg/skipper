@@ -112,3 +112,14 @@ function niceScale(max) {
   const step = [1, 2, 2.5, 5, 10].map((m) => m * exp).find((m) => m * 2 >= max) ?? 10 * exp;
   return { max: step * 2, ticks: [0, step, step * 2] };
 }
+
+// Why a working session has been silent: still running the tool it last started,
+// or nothing to explain it. Null when it is not quiet.
+function quietReason(session, nowMs, quietMs = 5 * 60_000) {
+  if (!session || session.state !== 'working' || nowMs - session.updatedAt <= quietMs) return null;
+  const tool = session.lastTool;
+  if (tool && tool.pending) {
+    return { kind: 'tool', since: tool.at, tool: tool.name, target: tool.target || null };
+  }
+  return { kind: 'silent', since: session.updatedAt };
+}

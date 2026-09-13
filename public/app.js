@@ -107,6 +107,16 @@ function dayBucket(at) {
 const relTime = (ms) => h('span', { class: 'rel', dataset: { rel: String(ms || '') } }, ago(ms));
 const QUIET_MS = 5 * 60_000;
 const relTimeBare = (ms) => h('span', { class: 'elapsed', dataset: { since: String(ms || '') } }, duration(now() - ms));
+function quietLine(session, cls = '') {
+  const q = quietReason(session, now(), QUIET_MS);
+  if (!q) return null;
+  if (q.kind === 'tool') {
+    return h('div', { class: `quiet-warning running ${cls}`, title: q.target ? `${toolName(q.tool)}: ${q.target}` : 'Still running this tool' },
+      icon('clock'), 'Running ', h('b', {}, toolName(q.tool)), ' for ', relTimeBare(q.since), q.target ? h('span', { class: 'quiet-target mono' }, q.target) : null);
+  }
+  return h('div', { class: `quiet-warning ${cls}`, title: 'Working, but nothing has been written for a while. It may be stuck.' }, icon('clock'), 'No activity for ', relTimeBare(q.since));
+}
+
 const elapsedTime = (ms) => h('span', { class: 'elapsed', dataset: { since: String(ms || '') } }, duration(now() - ms));
 const untilTime = (ms) => h('span', { class: 'until', dataset: { until: String(ms || '') } }, countdown(ms));
 
@@ -496,7 +506,7 @@ function sessionCard(s) {
       sleeping ? h('span', { class: 'countdown' }, untilTime(s.loop.wakeAt)) : s.state === 'working' && s.turnStartedAt ? h('span', { class: 'meta', title: 'Time since this turn started' }, 'running ', elapsedTime(s.turnStartedAt)) : h('span', { class: 'meta' }, relTime(s.updatedAt))),
     h('div', { class: 'card-title' }, s.title),
     h('div', { class: 'card-now' }, plain(sleeping && s.loop.reason ? s.loop.reason : s.current || s.lastText || '')),
-    s.state === 'working' && now() - s.updatedAt > QUIET_MS ? h('div', { class: 'quiet-warning', title: 'Working, but nothing has been written for a while. A command may be hanging.' }, icon('clock'), 'No activity for ', relTimeBare(s.updatedAt)) : null,
+    quietLine(s),
     segments(s.todoDone, s.todoTotal, Boolean(s.current), sleeping ? 'sleeping' : 'working'),
     h('div', { class: 'card-foot' },
       metaItem('folder', s.project),
@@ -957,7 +967,7 @@ function renderDetail(d) {
           stats.length || d.cost ? h('span', { class: 'meta', title: tokenTitle }, stats.join(' · '),
             d.cost ? [' · ', h('span', { class: 'plus' }, `+${d.cost.linesAdded}`), ' ', h('span', { class: 'minus' }, `−${d.cost.linesRemoved}`)] : null) : null,
           d.state === 'working' && d.turnStartedAt ? h('span', { class: 'meta' }, 'turn running ', elapsedTime(d.turnStartedAt)) : null,
-          d.state === 'working' && now() - d.updatedAt > QUIET_MS ? h('span', { class: 'meta quiet-warning' }, icon('clock'), 'no activity for ', relTimeBare(d.updatedAt)) : null,
+          quietLine(d, 'meta'),
           d.pid ? h('span', { class: 'meta mono faint' }, `pid ${d.pid}`) : null)),
       h('div', { class: 'head-actions' },
         pr && safeHref(pr.url) ? h('a', { class: 'btn', href: safeHref(pr.url), target: '_blank', rel: 'noopener noreferrer' }, icon('pr'), pr.number ? `PR #${pr.number}` : 'Pull request') : null,

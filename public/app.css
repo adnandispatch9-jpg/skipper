@@ -859,3 +859,9 @@ button.box:hover { border-color: var(--accent); }
   .rail-project span { flex: none; }
   .rail-project .dot { order: -1; }
 }
+
+.quiet-warning.running { color: var(--muted); flex-wrap: wrap; }
+.quiet-warning.running b { color: var(--text); font-weight: 600; }
+.quiet-target { flex-basis: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); }
+.meta-line .quiet-warning { font-size: 13px; }
+.meta-line .quiet-target { flex-basis: auto; max-width: 320px; }

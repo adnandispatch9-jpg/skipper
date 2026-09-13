@@ -75,7 +75,7 @@ function applyNotification(s, text, at) {
 function applyToolUse(s, block, at) {
   const input = block.input || {};
   const target = input.file_path || input.notebook_path || input.command || input.pattern || input.url || input.query || input.description || input.skill || null;
-  s.lastTool = { name: block.name, at, target: typeof target === 'string' ? clip(target.split('\n')[0], 160) : null };
+  s.lastTool = { id: block.id, name: block.name, at, target: typeof target === 'string' ? clip(target.split('\n')[0], 160) : null, pending: true };
 
   if (block.name === 'TodoWrite' && Array.isArray(input.todos)) {
     s.todos = input.todos.map((t) => ({
@@ -152,6 +152,7 @@ function applyUser(s, record, at) {
         s.lastPromptAt = at;
       }
     } else if (block.type === 'tool_result') {
+      if (s.lastTool && s.lastTool.id === block.tool_use_id) s.lastTool.pending = false;
       const agent = s.agents.get(block.tool_use_id);
       const workflow = s.workflows.get(block.tool_use_id);
       if (agent) {
