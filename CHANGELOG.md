@@ -5,6 +5,12 @@
 - `skipper doctor` checks Node, Claude Code data, hooks, recent hook events, notifications, the service and the dashboard, and says what to run for anything missing.
 - Quiet sessions say which tool they are still running.
 - Reply from the Needs you queue opens the session ready to type.
+- Multiple-choice questions from Claude are shown as questions, not permission prompts.
+- Sessions started in the background are labeled, so they are not mistaken for terminal sessions.
+- The dashboard opens immediately on start; session data follows when the first history scan finishes.
+- Status dots, progress and usage bars stay visible in Windows High Contrast and other forced-color modes.
+- Responses are gzipped and static files are cached with ETags.
+- The browser tab icon shows an amber or red dot when a session is waiting or needs permission.
 
 ## 0.5.0 (2026-09-13)
 
