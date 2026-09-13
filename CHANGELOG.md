@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `skipper hooks native on` sends system notifications for permission prompts and questions, even with no dashboard open.
+
 ## 0.4.0 (2026-09-13)
 
 - Sending messages is limited to 5 per minute, and live connections are capped.

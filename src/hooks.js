@@ -5,6 +5,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
 
 export const HOOK_EVENTS = ['Notification', 'Stop'];
 const MARKER = 'skipper-hook';
@@ -25,6 +26,48 @@ export function classify(input) {
   return type === 'auth_success' ? null : 'attention';
 }
 
+export function configFile(dataDir) {
+  return path.join(dataDir, 'config.json');
+}
+
+export async function readConfig(dataDir) {
+  try {
+    return JSON.parse(await fs.readFile(configFile(dataDir), 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+export async function writeConfig(dataDir, patch) {
+  const next = { ...(await readConfig(dataDir)), ...patch };
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(configFile(dataDir), `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  return next;
+}
+
+// System notification for events that need a person, so alerts arrive even with
+// no dashboard open. Text goes in as argv, never spliced into a script.
+export function nativeNotificationCommand(event, platform = process.platform) {
+  if (event.kind !== 'permission' && event.kind !== 'question') return null;
+  const title = event.kind === 'permission' ? 'Permission needed' : 'Claude asked you something';
+  const body = String(event.message || 'A Claude Code session is waiting for you.').slice(0, 200);
+  if (platform === 'darwin') {
+    return ['osascript', ['-e', 'on run argv', '-e', 'display notification (item 1 of argv) with title (item 2 of argv) subtitle "Skipper" sound name "Glass"', '-e', 'end run', body, title]];
+  }
+  if (platform === 'linux') return ['notify-send', ['--app-name=Skipper', '--urgency=critical', title, body]];
+  return null;
+}
+
+function notifyNative(event, spawnFn = spawn) {
+  const command = nativeNotificationCommand(event);
+  if (!command) return;
+  try {
+    const child = spawnFn(command[0], command[1], { stdio: 'ignore', detached: true });
+    child.on?.('error', () => {});
+    child.unref?.();
+  } catch {}
+}
+
 // Never throws and never blocks Claude: a broken dashboard must not break a session.
 export async function recordHook(rawInput, dataDir) {
   try {
@@ -42,6 +85,7 @@ export async function recordHook(rawInput, dataDir) {
     const file = eventsFile(dataDir);
     await fs.appendFile(file, `${JSON.stringify(event)}\n`, { mode: 0o600 });
     await rotate(file);
+    if ((await readConfig(dataDir)).nativeNotifications) notifyNative(event);
     return event;
   } catch {
     return null;

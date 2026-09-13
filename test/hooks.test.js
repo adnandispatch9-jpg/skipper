@@ -65,3 +65,20 @@ test('the event log is rotated to its most recent lines once it grows too large'
   assert.equal(JSON.parse(lines.at(-1)).at, 2999);
   assert.equal(await rotate(file, 10 * 1024 * 1024), false);
 });
+
+test('native notifications pass text as arguments and only fire for events that need a person', async () => {
+  const { nativeNotificationCommand, writeConfig, readConfig } = await import('../src/hooks.js');
+  const message = 'Claude needs your permission to use Bash: echo "$(whoami)"; end run';
+  const [cmd, args] = nativeNotificationCommand({ kind: 'permission', message }, 'darwin');
+  assert.equal(cmd, 'osascript');
+  assert.equal(args.at(-2), message, 'message is an argv item, not part of the script');
+  assert.ok(!args.slice(0, -2).some((a) => a.includes('whoami')));
+  assert.equal(nativeNotificationCommand({ kind: 'done' }, 'darwin'), null);
+  assert.equal(nativeNotificationCommand({ kind: 'question', message: 'x' }, 'linux')[0], 'notify-send');
+  assert.equal(nativeNotificationCommand({ kind: 'permission' }, 'win32'), null);
+
+  const dir = tmp();
+  assert.deepEqual(await readConfig(dir), {});
+  await writeConfig(dir, { nativeNotifications: true });
+  assert.equal((await readConfig(dir)).nativeNotifications, true);
+});

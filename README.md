@@ -109,7 +109,9 @@ This adds two official [Claude Code hooks](https://docs.anthropic.com/en/docs/cl
 | Finishes its turn | Soft chime: "waiting for your next message" |
 | Has been idle, waiting for input | Reminder chime |
 
-Choose sound and desktop notifications from the bell menu, and use **Test alert** to hear it. Remove the hooks any time with `skipper hooks uninstall`. The hook only appends a line to `~/.skipper/events.jsonl` and exits, so it can never slow down or break a session.
+Choose sound and desktop notifications from the bell menu, and use **Test alert** to hear it.
+
+Want alerts even when no dashboard is open? `skipper hooks native on` sends a system notification (macOS Notification Center, or `notify-send` on Linux) the moment a session asks for permission or asks you a question. Remove the hooks any time with `skipper hooks uninstall`. The hook only appends a line to `~/.skipper/events.jsonl` and exits, so it can never slow down or break a session.
 
 > Tip: browsers only play sound after you have clicked the page once, so click anywhere in Skipper after opening it.
 
@@ -133,6 +135,7 @@ System, Light, Dark, **Midnight** (true black for OLED screens), **Paper** (warm
 | `--demo` | off | Serve fictional sample sessions |
 | `-o, --open` | off | Open the dashboard in your browser |
 | `hooks install` / `uninstall` / `status` | | Manage the permission and turn-finished alerts |
+| `hooks native on` / `off` | off | System notifications for permission prompts, even with no dashboard open |
 
 ### Check on agents from your phone
 

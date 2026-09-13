@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { readFileSync, rmSync, existsSync } from 'node:fs';
 import { startServer, isLoopback } from '../src/server.js';
 import { writeDemo } from '../src/demo.js';
-import { recordHook, installHooks, uninstallHooks, hooksStatus } from '../src/hooks.js';
+import { recordHook, installHooks, uninstallHooks, hooksStatus, readConfig, writeConfig } from '../src/hooks.js';
 import { installService, uninstallService, serviceStatus } from '../src/service.js';
 import { fileURLToPath } from 'node:url';
 
@@ -17,6 +17,7 @@ Usage: skipper [options]
        skipper hooks install    Get sound and desktop alerts for permission prompts
        skipper hooks uninstall  Remove Skipper's Claude Code hooks
        skipper hooks status
+       skipper hooks native on|off  System notifications for permission prompts, even with no dashboard open
        skipper service install  Keep Skipper running in the background (macOS, Linux)
        skipper service uninstall
        skipper service status
@@ -144,9 +145,15 @@ if (argv[0] === 'hooks') {
     } else if (action === 'uninstall') {
       const { removed } = await uninstallHooks({ settingsFile });
       console.log(removed ? `Removed Skipper hooks from ${settingsFile}` : 'No Skipper hooks were installed.');
+    } else if (action === 'native') {
+      const value = argv[2];
+      if (value !== 'on' && value !== 'off') fail('Usage: skipper hooks native on|off');
+      await writeConfig(defaultDataDir(), { nativeNotifications: value === 'on' });
+      console.log(value === 'on' ? 'System notifications are on for permission prompts and questions.' : 'System notifications are off.');
     } else if (action === 'status') {
       const status = await hooksStatus({ settingsFile });
-      console.log(status.installed ? 'Skipper hooks are installed.' : 'Skipper hooks are not installed. Run: skipper hooks install');
+      const native = (await readConfig(defaultDataDir())).nativeNotifications;
+      console.log(`${status.installed ? 'Skipper hooks are installed.' : 'Skipper hooks are not installed. Run: skipper hooks install'}\nSystem notifications: ${native ? 'on' : 'off (skipper hooks native on)'}`);
     } else {
       fail(`Unknown hooks command: ${action}`);
     }
