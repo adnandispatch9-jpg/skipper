@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Every theme's text now meets WCAG AA contrast (4.5:1), checked by a test.
+
 ## 0.3.0 (2026-09-13)
 
 - Finished sessions get a Resume button that copies `cd <project> && claude --resume <id>`.

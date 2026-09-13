@@ -18,7 +18,7 @@
     "start": "node bin/skipper.js",
     "dev": "node bin/skipper.js --open",
     "demo": "node bin/skipper.js --demo --open",
-    "test": "node --test test/transcript.test.js test/server.test.js test/hooks.test.js test/store.test.js test/frontend.test.js test/service.test.js",
+    "test": "node --test test/transcript.test.js test/server.test.js test/hooks.test.js test/store.test.js test/frontend.test.js test/service.test.js test/contrast.test.js",
     "screenshots": "node scripts/screenshots.mjs"
   },
   "engines": {
