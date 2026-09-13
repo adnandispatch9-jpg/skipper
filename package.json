@@ -17,7 +17,7 @@
     "start": "node bin/skipper.js",
     "dev": "node bin/skipper.js --open",
     "demo": "node bin/skipper.js --demo --open",
-    "test": "node --test test/transcript.test.js test/server.test.js test/hooks.test.js"
+    "test": "node --test test/transcript.test.js test/server.test.js test/hooks.test.js test/store.test.js"
   },
   "engines": {
     "node": ">=20"

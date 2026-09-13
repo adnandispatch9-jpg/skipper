@@ -9,6 +9,16 @@ const CHUNK = 1 << 20;
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const WORKING_WINDOW_MS = 45_000;
 const QUIET_AFTER_MS = 10 * 60_000;
+const LOOP_GRACE_MS = 5 * 60_000;
+
+// A scheduled wakeup usually fires a little after its planned time, so a loop
+// counts as sleeping until well past wakeAt, as long as no newer prompt arrived.
+export function loopSleeping(loop, lastPromptAt, now) {
+  if (!loop?.active || loop.wakeAt == null) return false;
+  if (lastPromptAt != null && loop.at != null && lastPromptAt > loop.at) return false;
+  const grace = Math.max(LOOP_GRACE_MS, (loop.delaySeconds || 0) * 500);
+  return now < loop.wakeAt + grace;
+}
 
 export function isSessionId(value) {
   return typeof value === 'string' && SESSION_ID.test(value);
@@ -303,10 +313,10 @@ export class Store {
     const now = this.now();
     if (!live) return 'ended';
     if (this.#pendingAttention(s, live)) return 'permission';
-    const loopPending = s.loop?.active && s.loop.wakeAt > now;
+    const loopPending = loopSleeping(s.loop, s.lastPromptAt, now);
     if (live.status === 'busy') return 'working';
     if (live.status === 'idle') return loopPending ? 'sleeping' : 'waiting';
-    if (s.loop?.active && s.loop.wakeAt > now && s.lastKind === 'turn-end') return 'sleeping';
+    if (loopPending && s.lastKind === 'turn-end') return 'sleeping';
     if (s.lastKind !== 'turn-end' || now - (s.updatedAt ?? 0) < WORKING_WINDOW_MS) return 'working';
     return 'waiting';
   }
@@ -366,7 +376,7 @@ export class Store {
         lastText: s.lastText ? s.lastText.slice(0, 240) : null,
         agentsRunning: agents.filter((a) => a.status === 'running').length,
         agentsTotal: agents.length,
-        loop: s.loop?.active && live ? { wakeAt: s.loop.wakeAt, reason: s.loop.reason } : null,
+        loop: live && loopSleeping(s.loop, s.lastPromptAt, this.now()) ? { wakeAt: s.loop.wakeAt, reason: s.loop.reason } : null,
         prCount: s.prs.size,
         costUsd: s.cost?.usd ?? null,
         team: this.teams.get(s.id)?.name ?? null,

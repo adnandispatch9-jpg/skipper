@@ -18,6 +18,7 @@ export function createSummary(sessionId) {
     aiTitle: null,
     firstPrompt: null,
     lastPrompt: null,
+    lastPromptAt: null,
     startedAt: null,
     updatedAt: null,
     lastKind: null, // 'turn-end' once Claude hands control back to the user
@@ -127,6 +128,7 @@ function applyUser(s, record, at) {
     if (!record.isMeta && !content.startsWith('<')) {
       s.firstPrompt ??= clip(content, 300);
       s.lastPrompt = clip(content, 300);
+      s.lastPromptAt = at;
     }
     return;
   }
@@ -137,6 +139,7 @@ function applyUser(s, record, at) {
       else if (!record.isMeta && !block.text.startsWith('<')) {
         s.firstPrompt ??= clip(block.text, 300);
         s.lastPrompt = clip(block.text, 300);
+        s.lastPromptAt = at;
       }
     } else if (block.type === 'tool_result') {
       const agent = s.agents.get(block.tool_use_id);
