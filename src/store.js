@@ -72,6 +72,7 @@ export class Store {
   }
 
   async refresh() {
+    this.seenAux = new Set();
     const projectsDir = path.join(this.claudeDir, 'projects');
     const seen = new Set();
     for (const project of await listDir(projectsDir)) {
@@ -90,6 +91,10 @@ export class Store {
       }
     }
     for (const file of this.files.keys()) if (!seen.has(file)) this.files.delete(file);
+    // Forget subagents and workflow runs whose files are gone, so long uptimes don't accumulate them.
+    for (const cache of [this.subagentFiles, this.metaCache, this.workflowCache]) {
+      for (const file of cache.keys()) if (!this.seenAux.has(file)) cache.delete(file);
+    }
 
     await Promise.all([this.#readLive(), this.#readTasks(), this.#readTeams(), this.#readEvents()]);
 
@@ -149,6 +154,7 @@ export class Store {
       if (!file.name.endsWith('.meta.json')) continue;
       // Subagent metadata is written once when the agent starts, so read it once.
       const metaPath = path.join(dir, 'subagents', file.name);
+      this.seenAux.add(metaPath);
       let meta = this.metaCache.get(metaPath);
       if (!meta) {
         meta = await readJson(metaPath);
@@ -157,6 +163,7 @@ export class Store {
       if (!meta) continue;
       let lastActiveAt = null;
       const log = path.join(dir, 'subagents', file.name.replace('.meta.json', '.jsonl'));
+      this.seenAux.add(log);
       try {
         lastActiveAt = (await fs.stat(log)).mtimeMs;
       } catch {}
@@ -174,6 +181,7 @@ export class Store {
     for (const file of await listDir(path.join(dir, 'workflows'))) {
       if (!file.name.endsWith('.json')) continue;
       const runFile = path.join(dir, 'workflows', file.name);
+      this.seenAux.add(runFile);
       let mtimeMs;
       try {
         mtimeMs = (await fs.stat(runFile)).mtimeMs;

@@ -267,3 +267,24 @@ test('session detail includes its own token totals, subagents included', async (
   assert.ok(session.tokens.subagentOutput > 0 && session.tokens.subagentOutput < session.tokens.output);
   assert.equal(session.tokens.responses > 0, true);
 });
+
+test('deleted subagent transcripts are forgotten', async () => {
+  const { Store } = await import('../src/store.js');
+  const { cpSync, rmSync: rm, readdirSync } = await import('node:fs');
+  const copy = path.join(os.tmpdir(), `skipper-prune-${process.pid}`);
+  cpSync(dir, copy, { recursive: true });
+  try {
+    const store = new Store(copy);
+    await store.refresh();
+    const before = store.subagentFiles.size;
+    assert.ok(before > 0);
+    const project = readdirSync(path.join(copy, 'projects')).find((p) => p.endsWith('storefront'));
+    const sessionDir = readdirSync(path.join(copy, 'projects', project), { withFileTypes: true }).find((e) => e.isDirectory());
+    rm(path.join(copy, 'projects', project, sessionDir.name, 'subagents'), { recursive: true, force: true });
+    await store.refresh();
+    assert.equal(store.subagentFiles.size, 0);
+    assert.equal(store.metaCache.size, 0);
+  } finally {
+    rmSync(copy, { recursive: true, force: true });
+  }
+});
