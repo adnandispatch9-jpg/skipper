@@ -12,7 +12,7 @@
 ![Local first](https://img.shields.io/badge/data-stays%20on%20your%20machine-f0a93b)
 [![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-<img src="docs/screenshots/overview-dark.png" alt="Skipper overview: sessions that need you, working sessions, sleeping loops and running subagents" width="100%">
+<img src="docs/demo.gif" alt="Skipper tour: the attention queue, a session with subagents, a permission prompt, a sleeping loop and a team task list, across five themes" width="100%">
 
 </div>
 
