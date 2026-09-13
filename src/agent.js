@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { detectLanguage } from './speech.js';
 
 const BIN = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'skipper.js');
 const TOOL_PREFIX = 'mcp__skipper__';
@@ -23,7 +24,8 @@ How to answer:
 - Put what needs the user first: permission prompts, then questions, then finished work, then what is still running.
 - State meanings: permission = waiting for the user to approve a tool in the terminal; waiting = finished its turn and waiting for the user; working = running now; sleeping = a loop waiting for its next wakeup; ended = no longer running.
 - If the user asks you to tell a session something, call propose_message with the exact text. Nothing is sent until they confirm, so say you have prepared it for them to confirm.
-- You cannot approve permission prompts; say they must be answered in the terminal on the Mac.`;
+- You cannot approve permission prompts; say they must be answered in the terminal on the Mac.
+- Answer in the language the user spoke. The user often speaks Uzbek: then answer in natural, fluent Uzbek in Latin script (oʻ, gʻ), keeping session titles, project names and technical terms as they are. Otherwise answer in English.`;
 
 export function agentArgs({ mcpConfig, model }) {
   const args = [
@@ -119,7 +121,9 @@ export class Agent {
         skipper: { type: 'stdio', command: process.execPath, args: [BIN, 'mcp'], env: { SKIPPER_URL: this.baseUrl, SKIPPER_AGENT_KEY: this.agentKey } },
       },
     };
-    const args = [...agentArgs({ mcpConfig, model: this.model }), '--', promptWithHistory(conversation.turns, text)];
+    // Smaller models are fast but less fluent in Uzbek; spend a little latency on quality there.
+    const model = detectLanguage(text) === 'uz-UZ' ? process.env.SKIPPER_AGENT_MODEL_UZ || 'sonnet' : this.model;
+    const args = [...agentArgs({ mcpConfig, model }), '--', promptWithHistory(conversation.turns, text)];
     return new Promise((resolve) => {
       let child;
       try {

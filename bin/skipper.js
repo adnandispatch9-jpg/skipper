@@ -90,6 +90,51 @@ if (argv[0] === 'mcp') {
   await new Promise(() => {});
 }
 
+// Cloud voice for Uzbek (Azure AI Speech, free tier). The key is read from stdin so it never lands in shell history.
+if (argv[0] === 'voice') {
+  const { writeConfig, readConfig } = await import('../src/hooks.js');
+  const dataDir = defaultDataDir();
+  const sub = argv[1];
+  if (sub === 'setup') {
+    const regionIndex = argv.indexOf('--region');
+    const region = regionIndex > 0 ? argv[regionIndex + 1] : null;
+    if (!region || !/^[a-z0-9]+$/.test(region)) {
+      console.error('Usage: skipper voice setup --region <azure-region>   (then paste the Speech key)');
+      process.exit(1);
+    }
+    if (process.stdin.isTTY) process.stdout.write('Paste your Azure Speech key and press Enter: ');
+    let key = '';
+    process.stdin.setEncoding('utf8');
+    for await (const chunk of process.stdin) {
+      key += chunk;
+      if (key.includes('\n')) break;
+    }
+    key = key.trim();
+    if (!/^[A-Za-z0-9]{20,100}$/.test(key)) {
+      console.error('That does not look like an Azure Speech key.');
+      process.exit(1);
+    }
+    const { synthesize } = await import('../src/speech.js');
+    try {
+      await synthesize({ key, region, voices: (await import('../src/speech.js')).VOICES }, 'Salom', { language: 'uz-UZ' });
+    } catch (error) {
+      console.error(`Azure rejected the key or region: ${error.message}`);
+      process.exit(1);
+    }
+    await writeConfig(dataDir, { azureSpeech: { key, region } });
+    console.log('Uzbek voice is on. Restart Skipper so the phone app picks it up.');
+    process.exit(0);
+  }
+  if (sub === 'off') {
+    await writeConfig(dataDir, { azureSpeech: null });
+    console.log('Cloud voice is off.');
+    process.exit(0);
+  }
+  const saved = (await readConfig(dataDir)).azureSpeech;
+  console.log(saved ? `Cloud voice: on (Azure, region ${saved.region})` : 'Cloud voice: off. Run skipper voice setup --region <region> to turn on Uzbek voice.');
+  process.exit(0);
+}
+
 // Called by Claude Code itself (see `skipper hooks install`): record and exit quickly.
 if (argv[0] === 'hook') {
   let input = '';

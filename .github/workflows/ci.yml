@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: node --test test/transcript.test.js test/server.test.js test/hooks.test.js test/store.test.js test/frontend.test.js test/service.test.js test/contrast.test.js test/doctor.test.js test/cli.test.js test/startup.test.js test/agent.test.js
+      - run: node --test test/transcript.test.js test/server.test.js test/hooks.test.js test/store.test.js test/frontend.test.js test/service.test.js test/contrast.test.js test/doctor.test.js test/cli.test.js test/startup.test.js test/agent.test.js test/speech.test.js
       - name: Background service on Windows (install, answer, uninstall)
         if: runner.os == 'Windows'
         shell: pwsh

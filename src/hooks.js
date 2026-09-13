@@ -42,6 +42,7 @@ export async function writeConfig(dataDir, patch) {
   const next = { ...(await readConfig(dataDir)), ...patch };
   await fs.mkdir(dataDir, { recursive: true });
   await fs.writeFile(configFile(dataDir), `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  await fs.chmod(configFile(dataDir), 0o600).catch(() => {}); // it can hold the voice key
   return next;
 }
 

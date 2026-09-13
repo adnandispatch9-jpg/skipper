@@ -9,6 +9,7 @@ import { Notes, Tasks, ActionError, sendMessage } from './actions.js';
 import { eventsFile, hooksStatus } from './hooks.js';
 import { readConversation } from './conversation.js';
 import { Agent } from './agent.js';
+import { speechConfig, transcribe, synthesize, SpeechError, LANGUAGES } from './speech.js';
 import os from 'node:os';
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -162,6 +163,17 @@ export async function startServer({
   const messageTimes = [];
   const tasks = new Tasks(claudeDir, store);
 
+  async function readRaw(req, limit) {
+    let size = 0;
+    const chunks = [];
+    for await (const chunk of req) {
+      size += chunk.length;
+      if (size > limit) throw new ActionError(413, 'Recording too large');
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
+  }
+
   async function readBody(req) {
     let size = 0;
     const chunks = [];
@@ -187,8 +199,12 @@ export async function startServer({
 
   // Same protections as writes (custom header, JSON, same origin) for POSTs that change nothing.
   function checkJsonRequest(req) {
-    if (req.headers['x-skipper'] !== '1') throw new ActionError(403, 'Missing X-Skipper header');
+    checkSkipperRequest(req);
     if (!String(req.headers['content-type'] || '').startsWith('application/json')) throw new ActionError(415, 'Use application/json');
+  }
+
+  function checkSkipperRequest(req) {
+    if (req.headers['x-skipper'] !== '1') throw new ActionError(403, 'Missing X-Skipper header');
     const origin = req.headers.origin;
     if (origin && origin !== 'null') {
       let originHost;
@@ -240,7 +256,8 @@ export async function startServer({
         return json(res, 200, { now: Date.now(), readOnly, session: { ...session, notes: await notes.list(session.id) } });
       }
       if (url.pathname === '/api/info') {
-        return json(res, 200, { name: os.hostname().replace(/\.local$/, ''), readOnly, agent: Boolean(claudeBin), version: 1 });
+        const speech = await speechConfig(skipperDir);
+        return json(res, 200, { name: os.hostname().replace(/\.local$/, ''), readOnly, agent: Boolean(claudeBin), cloudVoice: Boolean(speech), languages: LANGUAGES, version: 1 });
       }
       if (parts[0] === 'api' && parts[1] === 'sessions' && parts.length === 4 && parts[3] === 'conversation') {
         if (!store.get(parts[2])) return json(res, 404, { error: 'Session not found' });
@@ -260,6 +277,31 @@ export async function startServer({
       return json(res, 404, { error: 'Not found' });
     }
 
+    if (method === 'POST' && url.pathname === '/api/voice/transcribe') {
+      checkSkipperRequest(req);
+      if (!String(req.headers['content-type'] || '').startsWith('audio/wav')) throw new ActionError(415, 'Send 16 kHz mono audio/wav');
+      const lang = url.searchParams.get('language');
+      const languages = LANGUAGES.includes(lang) ? [lang] : LANGUAGES;
+      const audio = await readRaw(req, 4 * 1024 * 1024);
+      try {
+        return json(res, 200, await transcribe(await speechConfig(skipperDir), audio, { languages }));
+      } catch (error) {
+        if (error instanceof SpeechError) return json(res, error.status, { error: error.message });
+        throw error;
+      }
+    }
+    if (method === 'POST' && url.pathname === '/api/voice/speak') {
+      checkJsonRequest(req);
+      const body = await readBody(req);
+      try {
+        const { audio, language } = await synthesize(await speechConfig(skipperDir), body.text, { language: body.language });
+        res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store', 'Content-Length': audio.length, 'X-Skipper-Language': language });
+        return res.end(audio);
+      } catch (error) {
+        if (error instanceof SpeechError) return json(res, error.status, { error: error.message });
+        throw error;
+      }
+    }
     if (method === 'POST' && url.pathname === '/api/agent/ask') {
       checkJsonRequest(req);
       const body = await readBody(req);
