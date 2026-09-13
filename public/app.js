@@ -65,6 +65,7 @@ const ICONS = {
   edit: 'M4 20h4L19 9l-4-4L4 16ZM13.5 6.5l4 4',
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
   send: 'M4 12 20 4l-6 16-3-7Z',
+  copy: 'M10 8h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2ZM16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2',
   bell: 'M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15ZM10 20a2 2 0 0 0 4 0',
 };
 
@@ -621,12 +622,42 @@ function confirmButton(action, data, label) {
   return h('button', { class: 'icon-btn tiny danger', type: 'button', title: label, 'aria-label': label, dataset: { action: 'confirm', then: action, ...data } }, icon('trash'));
 }
 
+function splitAsk(message) {
+  const text = message || '';
+  const match = text.match(/^(.*?(?:to use|to run)\s+[\w-]+):\s*(.+)$/i);
+  return match ? { lead: match[1], command: match[2] } : { lead: text, command: null };
+}
+
 function attentionPanel(d) {
   if (!d.attention) return null;
+  const { lead, command } = splitAsk(d.attention.message);
   return h('section', { class: 'panel attention', role: 'alert' },
-    h('div', { class: 'panel-head' }, h('h2', {}, d.attention.kind === 'question' ? 'Claude asked you something' : 'Permission needed'), h('span', { class: 'meta' }, relTime(d.attention.at))),
-    h('p', { class: 'quote' }, d.attention.message || 'Claude is waiting for your approval.'),
-    h('p', { class: 'hint' }, 'Answer it in the terminal where this session is running.'),
+    h('div', { class: 'panel-head' },
+      h('h2', {}, icon('shield'), d.attention.kind === 'question' ? 'Claude asked you something' : 'Permission needed'),
+      h('span', { class: 'meta' }, relTime(d.attention.at))),
+    command
+      ? [h('p', { class: 'attention-lead' }, lead || 'Claude wants to run a command'),
+        h('div', { class: 'command-box' },
+          h('code', {}, command),
+          h('button', { class: 'icon-btn tiny', type: 'button', title: 'Copy command', 'aria-label': 'Copy command', dataset: { action: 'copy', text: command } }, icon('copy')))]
+      : h('p', { class: 'quote' }, d.attention.message || 'Claude is waiting for your approval.'),
+    h('p', { class: 'hint' }, 'Approve or deny it in the terminal where this session runs. This page updates as soon as you answer.'),
+  );
+}
+
+function renderTabbar() {
+  const r = route();
+  const live = state.sessions.filter((s) => s.live);
+  const needs = live.filter((s) => s.state === 'permission' || s.state === 'waiting').length;
+  const active = r.name === 'overview' ? 'needs' : r.name === 'list' ? state.filter : null;
+  const tab = (id, href, label, badge, dot) =>
+    h('a', { class: 'tab', href, 'aria-current': active === id ? 'page' : null, dataset: { tab: id } },
+      badge ? h('span', { class: `tab-badge ${dot}` }, badge) : h('i', { class: `dot ${dot}` }),
+      h('span', {}, label));
+  $('#tabbar').replaceChildren(
+    tab('needs', '#/', 'Needs you', needs, needs ? (live.some((s) => s.state === 'permission') ? 'permission' : 'waiting') : 'working'),
+    tab('live', '#/sessions', 'Live', null, 'working'),
+    tab('history', '#/sessions', 'History', null, 'ended'),
   );
 }
 
@@ -804,6 +835,8 @@ function render() {
   if (!state.loaded) return;
   const r = route();
   document.body.classList.toggle('route-list', r.name === 'list');
+  document.body.classList.toggle('route-session', r.name === 'session');
+  renderTabbar();
   renderSidebar(r.id);
   const main = $('#main');
   const active = document.activeElement;
@@ -945,6 +978,26 @@ async function runAction(action, el, form) {
       case 'task-delete':
         await api('DELETE', `${base}/tasks/${el.dataset.task}`);
         break;
+      case 'copy': {
+        const text = el.dataset.text || '';
+        let copied = false;
+        try {
+          // writeText can hang without settling when the tab lacks focus.
+          await Promise.race([navigator.clipboard.writeText(text), new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))]);
+          copied = true;
+        } catch {
+          // Plain-http network access has no async clipboard; fall back to a selection copy.
+          const area = h('textarea', { class: 'copy-buffer', readonly: true, 'aria-hidden': 'true' }, text);
+          document.body.append(area);
+          area.select();
+          try {
+            copied = document.execCommand('copy');
+          } catch {}
+          area.remove();
+        }
+        toast(copied ? 'Command copied' : 'Copy is not available here. Select the command instead.', copied ? '' : 'error');
+        return;
+      }
       case 'focus-composer':
         focusComposer();
         return;
@@ -1051,6 +1104,13 @@ function init() {
   });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(store.get('skipper.theme')));
   wireActions();
+  $('#tabbar').addEventListener('click', (event) => {
+    const tab = event.target.closest('[data-tab]');
+    if (!tab || tab.dataset.tab === 'needs') return;
+    state.filter = tab.dataset.tab;
+    store.set('skipper.filter', state.filter);
+    if (location.hash === '#/sessions') render();
+  });
 
   state.sound = store.get('skipper.sound') !== '0';
   state.turns = store.get('skipper.turns') !== '0';
