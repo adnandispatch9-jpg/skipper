@@ -849,3 +849,13 @@ button.box:hover { border-color: var(--accent); }
 
 .quiet-warning { display: inline-flex; align-items: center; gap: 6px; color: var(--waiting); font-size: 12.5px; font-weight: 550; }
 .quiet-warning svg { width: 14px; height: 14px; }
+
+/* Phones: projects become one scrollable row of chips so sessions stay in view. */
+@media (max-width: 900px) {
+  .rail-projects { flex-direction: row; gap: 6px; overflow-x: auto; padding: 4px 0 12px; margin: 0 -16px 4px; padding-inline: 16px; scrollbar-width: none; }
+  .rail-projects::-webkit-scrollbar { display: none; }
+  .rail-projects .group-label { display: none; }
+  .rail-project { flex: none; width: auto; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); min-height: 36px; }
+  .rail-project span { flex: none; }
+  .rail-project .dot { order: -1; }
+}
