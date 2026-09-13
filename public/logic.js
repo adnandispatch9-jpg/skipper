@@ -113,6 +113,13 @@ function niceScale(max) {
   return { max: step * 2, ticks: [0, step, step * 2] };
 }
 
+// The next theme in menu order, wrapping back to the first.
+function nextTheme(current, themes) {
+  const ids = themes.map(([id]) => id);
+  const index = ids.indexOf(current);
+  return ids[(index + 1) % ids.length] ?? ids[0];
+}
+
 // Why a working session has been silent: still running the tool it last started,
 // or nothing to explain it. Null when it is not quiet.
 function quietReason(session, nowMs, quietMs = 5 * 60_000) {

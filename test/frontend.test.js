@@ -32,7 +32,7 @@ test('index.html references only elements app.js expects', () => {
 
 const helpers = (() => {
   const context = {};
-  vm.runInNewContext(`${logic}\n;globalThis.out = { quietReason, formatTokens, niceScale, resumeCommand, formatAgo, formatCountdown, duration, safeHref, toolName, plain, splitAsk, dayBucketAt, groupActivity, faviconHref };`, context);
+  vm.runInNewContext(`${logic}\n;globalThis.out = { quietReason, formatTokens, niceScale, nextTheme, resumeCommand, formatAgo, formatCountdown, duration, safeHref, toolName, plain, splitAsk, dayBucketAt, groupActivity, faviconHref };`, context);
   return context.out;
 })();
 
@@ -96,6 +96,22 @@ test('chart scale rounds up to a readable maximum', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(helpers.niceScale(740_000))), { max: 1_000_000, ticks: [0, 500_000, 1_000_000] });
   assert.deepEqual(JSON.parse(JSON.stringify(helpers.niceScale(310))), { max: 400, ticks: [0, 200, 400] });
   assert.equal(helpers.niceScale(0).max, 1);
+});
+
+test('theme cycling follows menu order and wraps', () => {
+  const themes = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark'], ['midnight', 'Midnight'], ['paper', 'Paper'], ['contrast', 'High contrast']];
+  assert.equal(helpers.nextTheme(null, themes), 'system');
+  assert.equal(helpers.nextTheme('system', themes), 'light');
+  assert.equal(helpers.nextTheme('paper', themes), 'contrast');
+  assert.equal(helpers.nextTheme('contrast', themes), 'system');
+});
+
+test('theme shortcut is wired outside typing fields and documented', () => {
+  const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const keys = app.slice(app.indexOf("document.addEventListener('keydown'"), app.indexOf("window.addEventListener('hashchange'"));
+  assert.match(keys, /const typing = .*input, textarea, select, \[contenteditable\]/);
+  assert.match(keys, /if \(!typing[\s\S]*event\.key === 't'[\s\S]*cycleTheme\(\)/);
+  assert.match(html, /<kbd>t<\/kbd><\/dt><dd>Cycle theme<\/dd>/);
 });
 
 test('quiet sessions explain whether a tool is still running', () => {

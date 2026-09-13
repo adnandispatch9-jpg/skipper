@@ -1042,6 +1042,13 @@ function toggleThemeMenu(open) {
   if (show) menu.querySelector('[aria-checked="true"]')?.focus();
 }
 
+function cycleTheme() {
+  const next = nextTheme(store.get('skipper.theme'), THEMES);
+  if (!next) return;
+  store.set('skipper.theme', next);
+  applyTheme(next);
+}
+
 /* ---------- write actions ---------- */
 
 async function api(method, url, body) {
@@ -1379,6 +1386,11 @@ function init() {
       if (event.key === '?') {
         event.preventDefault();
         dialog.open ? dialog.close() : dialog.showModal();
+        return;
+      }
+      if (event.key === 't') {
+        event.preventDefault();
+        cycleTheme();
         return;
       }
       if (pendingG && Date.now() - pendingG < 1200) {
