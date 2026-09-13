@@ -197,9 +197,13 @@ export class Store {
     } catch {
       return;
     }
-    const firstRead = this.eventsOffset === 0 && this.attention.size === 0 && !this.eventsRead;
+    let replay = !this.eventsRead;
     this.eventsRead = true;
-    if (stat.size < this.eventsOffset) this.eventsOffset = 0;
+    if (stat.size < this.eventsOffset) {
+      // The hook rotated the log: re-read it for state, but do not ring old alerts again.
+      this.eventsOffset = 0;
+      replay = true;
+    }
     if (stat.size === this.eventsOffset) return;
     const handle = await fs.open(this.eventsFile, 'r');
     let text;
@@ -224,7 +228,7 @@ export class Store {
       if (!isSessionId(event.sessionId) || !Number.isFinite(event.at)) continue;
       if (event.kind === 'permission' || event.kind === 'question') this.attention.set(event.sessionId, event);
       // Replaying an old log on startup must not ring every bell at once.
-      if (!firstRead && this.now() - event.at < 60_000) this.pendingAlerts.push(event);
+      if (!replay && this.now() - event.at < 60_000) this.pendingAlerts.push(event);
     }
   }
 

@@ -53,3 +53,15 @@ test('install works when settings.json does not exist yet', async () => {
   await installHooks({ settingsFile, nodePath: 'node', scriptPath: 'skipper.js' });
   assert.equal((await hooksStatus({ settingsFile })).installed, true);
 });
+
+test('the event log is rotated to its most recent lines once it grows too large', async () => {
+  const { rotate } = await import('../src/hooks.js');
+  const dir = tmp();
+  const file = path.join(dir, 'events.jsonl');
+  writeFileSync(file, Array.from({ length: 3000 }, (_, i) => JSON.stringify({ at: i, sessionId: ID, kind: 'done' })).join('\n') + '\n');
+  assert.equal(await rotate(file, 1024), true);
+  const lines = readFileSync(file, 'utf8').trim().split('\n');
+  assert.equal(lines.length, 1000);
+  assert.equal(JSON.parse(lines.at(-1)).at, 2999);
+  assert.equal(await rotate(file, 10 * 1024 * 1024), false);
+});

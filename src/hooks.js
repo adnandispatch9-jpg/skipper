@@ -39,11 +39,27 @@ export async function recordHook(rawInput, dataDir) {
       cwd: typeof input.cwd === 'string' ? input.cwd : null,
     };
     await fs.mkdir(dataDir, { recursive: true });
-    await fs.appendFile(eventsFile(dataDir), `${JSON.stringify(event)}\n`, { mode: 0o600 });
+    const file = eventsFile(dataDir);
+    await fs.appendFile(file, `${JSON.stringify(event)}\n`, { mode: 0o600 });
+    await rotate(file);
     return event;
   } catch {
     return null;
   }
+}
+
+export const ROTATE_AT_BYTES = 512 * 1024;
+const KEEP_LINES = 1000;
+
+// Every turn of every session appends a line, so keep the log bounded.
+export async function rotate(file, limit = ROTATE_AT_BYTES) {
+  const stat = await fs.stat(file);
+  if (stat.size <= limit) return false;
+  const lines = (await fs.readFile(file, 'utf8')).split('\n').filter(Boolean).slice(-KEEP_LINES);
+  const tmp = `${file}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+  await fs.writeFile(tmp, `${lines.join('\n')}\n`, { mode: 0o600 });
+  await fs.rename(tmp, file);
+  return true;
 }
 
 function hookCommand(nodePath, scriptPath) {
