@@ -99,3 +99,24 @@ test('a "needs your permission" notification right after a question is shown as 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('activity survives hook events for sessions whose transcript is not read yet', async () => {
+  const { writeDemo } = await import('../src/demo.js');
+  const { Store } = await import('../src/store.js');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { rmSync, writeFileSync } = await import('node:fs');
+  const dir = path.join(os.tmpdir(), `skipper-orphan-${process.pid}`);
+  await writeDemo(dir);
+  const events = path.join(dir, 'orphan-events.jsonl');
+  const ghost = '99999999-8888-4777-8666-555555555555';
+  writeFileSync(events, ['done', 'idle', 'permission'].map((kind, i) => JSON.stringify({ at: Date.now() - i, sessionId: ghost, kind, message: null })).join('\n') + '\n');
+  try {
+    const store = new Store(dir, { eventsFile: events });
+    await store.refresh();
+    const items = store.activity({ limit: 300 });
+    assert.ok(items.some((i) => i.sessionId === ghost && i.kind === 'turn'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

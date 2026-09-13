@@ -474,8 +474,9 @@ export class Store {
         // A turn that scheduled a wakeup shortly before it ended is a loop tick.
         const looped = s?.wakeups?.some((t) => t <= event.at && event.at - t < 5 * 60_000);
         const latest = newestDone.get(event.sessionId) === event;
-        if (looped) push(event.sessionId, event.at, 'loop', 'Loop went to sleep', latest ? s.loop?.reason ?? null : null);
-        else push(event.sessionId, event.at, 'turn', 'Turn finished', latest && s.lastText ? s.lastText.split('\n')[0].slice(0, 160) : null);
+        // Hook events can arrive before the session's transcript has been read, so s may be missing.
+        if (looped) push(event.sessionId, event.at, 'loop', 'Loop went to sleep', latest ? s?.loop?.reason ?? null : null);
+        else push(event.sessionId, event.at, 'turn', 'Turn finished', latest && s?.lastText ? s.lastText.split('\n')[0].slice(0, 160) : null);
       }
     }
     for (const s of summaries.values()) {
