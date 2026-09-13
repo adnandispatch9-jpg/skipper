@@ -323,8 +323,8 @@ function toggleNotifyMenu(open) {
 
 function route() {
   const hash = location.hash;
-  const match = hash.match(/^#\/s\/([0-9a-f-]{36})$/i);
-  if (match) return { name: 'session', id: match[1] };
+  const match = hash.match(/^#\/s\/([0-9a-f-]{36})(\/reply)?$/i);
+  if (match) return { name: 'session', id: match[1], reply: Boolean(match[2]) };
   if (hash === '#/sessions') return { name: 'list' };
   if (hash === '#/activity') return { name: 'activity' };
   if (hash === '#/usage') return { name: 'usage' };
@@ -336,7 +336,7 @@ function route() {
 function matches(s) {
   const q = state.query.trim().toLowerCase();
   if (!q) return true;
-  return [s.title, s.project, s.cwd, s.branch, s.current, s.team].some((v) => v && v.toLowerCase().includes(q));
+  return [s.title, s.project, s.cwd, s.branch, s.current, s.team, s.lastText].some((v) => v && v.toLowerCase().includes(q));
 }
 
 function visibleSessions() {
@@ -468,7 +468,7 @@ function queueRow(s) {
   const permission = s.state === 'permission';
   const ask = s.attention?.message || '';
   const command = ask.match(/:\s*(.+)$/)?.[1];
-  return h('a', { class: `queue-row ${s.state}`, href: `#/s/${s.id}` },
+  return h('a', { class: `queue-row ${s.state}`, href: permission ? `#/s/${s.id}` : `#/s/${s.id}/reply` },
     h('span', { class: 'queue-icon' }, icon(permission ? 'shield' : 'reply')),
     h('span', { class: 'queue-body' },
       h('span', { class: 'queue-title' },
@@ -990,6 +990,11 @@ function render() {
   if (r.name === 'list') renderPulse();
   main.dataset.view = r.id || r.name;
   main.scrollTop = keepScroll;
+  if (r.name === 'session' && r.reply && state.detail) {
+    // Reply links open the session ready to type; drop the suffix so reloads don't refocus.
+    history.replaceState(null, '', `#/s/${r.id}`);
+    focusComposer();
+  }
 }
 
 /* ---------- controls ---------- */
