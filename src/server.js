@@ -2,6 +2,7 @@ import http from 'node:http';
 import { watch, promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { Store } from './store.js';
 import { Notes, Tasks, ActionError, sendMessage } from './actions.js';
@@ -61,8 +62,16 @@ function cookie(req, name) {
   return null;
 }
 
+// Bodies over 1 KB are gzipped when the client accepts it: session lists are
+// mostly repeated keys and shrink about 5x, which matters on a phone over Wi-Fi.
 function send(res, status, body, type = 'application/json; charset=utf-8', extra = {}) {
-  res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': type, 'Cache-Control': 'no-store', ...extra });
+  const headers = { ...SECURITY_HEADERS, 'Content-Type': type, 'Cache-Control': 'no-store', ...extra };
+  if (body && body.length > 1024 && /\bgzip\b/.test(res.req?.headers['accept-encoding'] || '')) {
+    body = gzipSync(body);
+    headers['Content-Encoding'] = 'gzip';
+    headers.Vary = 'Accept-Encoding';
+  }
+  res.writeHead(status, headers);
   res.end(body);
 }
 
@@ -173,7 +182,10 @@ export async function startServer({
     if (method === 'GET' || method === 'HEAD') {
       if (STATIC[url.pathname]) {
         const [file, type] = STATIC[url.pathname];
-        return send(res, 200, await fs.readFile(path.join(PUBLIC_DIR, file)), type, { 'Cache-Control': 'no-cache' });
+        const body = await fs.readFile(path.join(PUBLIC_DIR, file));
+        const etag = `"${crypto.createHash('sha1').update(body).digest('base64url').slice(0, 16)}"`;
+        if (req.headers['if-none-match'] === etag) return send(res, 304, null, type, { 'Cache-Control': 'no-cache', ETag: etag });
+        return send(res, 200, body, type, { 'Cache-Control': 'no-cache', ETag: etag });
       }
       if (url.pathname === '/api/usage') {
         const days = [1, 7, 14, 30].includes(Number(url.searchParams.get('days'))) ? Number(url.searchParams.get('days')) : 14;

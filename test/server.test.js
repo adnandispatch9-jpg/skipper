@@ -288,3 +288,25 @@ test('deleted subagent transcripts are forgotten', async () => {
     rmSync(copy, { recursive: true, force: true });
   }
 });
+
+test('static files use ETags and large bodies are gzipped only when accepted', async () => {
+  const { request } = await import('node:http');
+  const { gunzipSync } = await import('node:zlib');
+  const raw = (pathname, headers = {}) => new Promise((resolve, reject) => {
+    request(`${base}${pathname}`, { headers }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }));
+    }).on('error', reject).end();
+  });
+  const first = await raw('/app.js');
+  assert.equal(first.status, 200);
+  assert.equal(first.headers['content-encoding'], undefined);
+  assert.ok(first.headers.etag);
+  const cached = await raw('/app.js', { 'If-None-Match': first.headers.etag });
+  assert.equal(cached.status, 304);
+  assert.equal(cached.body.length, 0);
+  const zipped = await raw('/api/sessions', { 'Accept-Encoding': 'gzip, br' });
+  assert.equal(zipped.headers['content-encoding'], 'gzip');
+  assert.ok(Array.isArray(JSON.parse(gunzipSync(zipped.body)).sessions));
+});
