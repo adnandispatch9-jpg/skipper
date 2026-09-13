@@ -275,12 +275,17 @@ export class Store {
   }
 
   async #readLive() {
-    this.live = new Map();
+    // Build into a new map and swap at the end: readers must never see it half-filled.
+    const live = new Map();
+    const byFile = new Map();
     for (const file of await listDir(path.join(this.claudeDir, 'sessions'))) {
       if (!file.name.endsWith('.json')) continue;
-      const info = await readJson(path.join(this.claudeDir, 'sessions', file.name));
+      // A file being rewritten (or locked, on Windows) can fail to parse for a moment;
+      // keep what it said last time instead of flickering the session to ended.
+      const info = (await readJson(path.join(this.claudeDir, 'sessions', file.name))) ?? this.liveFiles?.get(file.name);
       if (!info || !isSessionId(info.sessionId) || !this.isAlive(info.pid)) continue;
-      this.live.set(info.sessionId, {
+      byFile.set(file.name, info);
+      live.set(info.sessionId, {
         pid: info.pid,
         kind: info.kind || null,
         entrypoint: info.entrypoint || null,
@@ -288,10 +293,13 @@ export class Store {
         status: typeof info.status === 'string' ? info.status : null,
       });
     }
+    this.live = live;
+    this.liveFiles = byFile;
   }
 
   async #readTasks() {
-    this.tasks = new Map();
+    // Build into a new map and swap at the end: readers must never see it half-filled.
+    const tasks = new Map();
     const tasksDir = path.join(this.claudeDir, 'tasks');
     for (const dir of await listDir(tasksDir)) {
       if (!dir.isDirectory()) continue;
@@ -311,22 +319,25 @@ export class Store {
         });
       }
       items.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
-      this.tasks.set(dir.name, items);
+      tasks.set(dir.name, items);
     }
+    this.tasks = tasks;
   }
 
   async #readTeams() {
-    this.teams = new Map();
+    // Build into a new map and swap at the end: readers must never see it half-filled.
+    const teams = new Map();
     const teamsDir = path.join(this.claudeDir, 'teams');
     for (const dir of await listDir(teamsDir)) {
       const config = await readJson(path.join(teamsDir, dir.name, 'config.json'));
       if (!config || !isSessionId(config.leadSessionId)) continue;
       const members = Array.isArray(config.members) ? config.members : [];
-      this.teams.set(config.leadSessionId, {
+      teams.set(config.leadSessionId, {
         name: String(config.name ?? dir.name),
         members: members.map((m) => ({ name: String(m.name ?? m.agentId ?? 'member'), agentType: m.agentType ?? null, model: m.model ?? null })),
       });
     }
+    this.teams = teams;
   }
 
   // Task lists are keyed by session id, session-<first 8>, or the team name.

@@ -13,10 +13,14 @@ test('the page answers during a slow first scan and API calls wait for it', { ti
   await writeDemo(dir);
   const original = Store.prototype.refresh;
   let first = true;
+  let scanned = false;
   Store.prototype.refresh = async function slowFirst(...args) {
     if (first) {
       first = false;
-      await new Promise((r) => setTimeout(r, 600));
+      await new Promise((r) => setTimeout(r, 1500));
+      const result = await original.apply(this, args);
+      scanned = true;
+      return result;
     }
     return original.apply(this, args);
   };
@@ -31,15 +35,14 @@ test('the page answers during a slow first scan and API calls wait for it', { ti
   const starting = startServer({ claudeDir: dir, dataDir: path.join(dir, '.skipper'), port: 0, log: () => {} });
   try {
     const port = await listening;
-    const started = Date.now();
     const page = await fetch(`http://127.0.0.1:${port}/`);
     assert.equal(page.status, 200);
-    assert.ok(Date.now() - started < 500, 'the page should not wait for the scan');
+    assert.equal(scanned, false, 'the page should not wait for the scan');
     const data = await (await fetch(`http://127.0.0.1:${port}/api/sessions`)).json();
     assert.ok(data.sessions.length > 0, 'API answered before the scan finished');
-    const app = await starting;
-    await app.close();
   } finally {
+    // Always close, even after a failed assertion, or the open server keeps the test process alive.
+    await (await starting.catch(() => null))?.close();
     Store.prototype.refresh = original;
     rmSync(dir, { recursive: true, force: true });
   }
