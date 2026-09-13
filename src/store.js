@@ -516,6 +516,20 @@ export class Store {
     };
   }
 
+  #sessionTokens(s) {
+    const t = { output: 0, input: 0, cacheRead: 0, subagentOutput: 0, responses: 0 };
+    const add = (u, subagent) => {
+      t.output += u.output;
+      t.input += u.input + u.cacheRead + u.cacheWrite;
+      t.cacheRead += u.cacheRead;
+      t.responses += 1;
+      if (subagent) t.subagentOutput += u.output;
+    };
+    for (const u of s.usage.values()) add(u, false);
+    for (const entry of this.subagentFiles.values()) if (entry.sessionId === s.id) for (const u of entry.usage.values()) add(u, true);
+    return t.responses ? t : null;
+  }
+
   get(id) {
     if (!isSessionId(id)) return null;
     const s = this.#summaries().get(id);
@@ -543,6 +557,7 @@ export class Store {
       prs: [...s.prs.values()],
       artifacts: [...s.artifacts.values()],
       cost: s.cost,
+      tokens: this.#sessionTokens(s),
       team: this.teams.get(id) ?? null,
     };
   }

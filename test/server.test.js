@@ -259,3 +259,11 @@ test('usage counts each response once, includes subagents, and groups by day, pr
   assert.ok(res.byProject.find((p) => p.name === 'storefront'));
   assert.equal((await (await fetch(`${base}/api/usage?days=999`)).json()).days, 14, 'unknown ranges fall back to 14');
 });
+
+test('session detail includes its own token totals, subagents included', async () => {
+  const s = await sessionByTitle('Checkout flow redesign');
+  const { session } = await (await fetch(`${base}/api/sessions/${s.id}`)).json();
+  assert.ok(session.tokens.output > 0);
+  assert.ok(session.tokens.subagentOutput > 0 && session.tokens.subagentOutput < session.tokens.output);
+  assert.equal(session.tokens.responses > 0, true);
+});

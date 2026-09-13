@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Working sessions show how long the turn has run, and warn after five quiet minutes.
+- Session pages show that session's token totals, subagents included.
 - `skipper hooks native on` sends system notifications for permission prompts and questions, even with no dashboard open.
 
 ## 0.4.0 (2026-09-13)

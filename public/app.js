@@ -935,8 +935,12 @@ function renderDetail(d) {
   const stats = [
     d.startedAt && d.updatedAt ? duration(d.updatedAt - d.startedAt) : null,
     d.turns ? `${d.turns} turn${d.turns === 1 ? '' : 's'}` : null,
+    d.tokens ? `${formatTokens(d.tokens.output)} output tokens` : null,
     d.cost ? `$${d.cost.usd.toFixed(2)}` : null,
   ].filter(Boolean);
+  const tokenTitle = d.tokens
+    ? `${formatTokens(d.tokens.output)} output and ${formatTokens(d.tokens.input)} input tokens over ${d.tokens.responses} responses; ${Math.round((d.tokens.subagentOutput / Math.max(1, d.tokens.output)) * 100)}% of output from subagents, ${Math.round((d.tokens.cacheRead / Math.max(1, d.tokens.input)) * 100)}% of input from cache`
+    : null;
 
   return h('article', { class: 'session-page' },
     h('nav', { class: 'crumbs', 'aria-label': 'Breadcrumb' },
@@ -950,7 +954,7 @@ function renderDetail(d) {
           d.cwd ? h('span', { class: 'meta mono', title: d.cwd }, icon('folder'), d.cwd.replace(/^\/(Users|home)\/[^/]+/, '~')) : null,
           d.branch && d.branch !== 'HEAD' ? h('span', { class: 'meta' }, icon('branch'), d.branch) : null,
           d.model ? h('span', { class: 'meta' }, [d.model, d.permissionMode ? `${d.permissionMode} mode` : null].filter(Boolean).join(' · ')) : null,
-          stats.length || d.cost ? h('span', { class: 'meta' }, stats.join(' · '),
+          stats.length || d.cost ? h('span', { class: 'meta', title: tokenTitle }, stats.join(' · '),
             d.cost ? [' · ', h('span', { class: 'plus' }, `+${d.cost.linesAdded}`), ' ', h('span', { class: 'minus' }, `−${d.cost.linesRemoved}`)] : null) : null,
           d.state === 'working' && d.turnStartedAt ? h('span', { class: 'meta' }, 'turn running ', elapsedTime(d.turnStartedAt)) : null,
           d.state === 'working' && now() - d.updatedAt > QUIET_MS ? h('span', { class: 'meta quiet-warning' }, icon('clock'), 'no activity for ', relTimeBare(d.updatedAt)) : null,
