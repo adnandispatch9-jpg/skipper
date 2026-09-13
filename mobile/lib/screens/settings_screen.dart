@@ -109,7 +109,9 @@ class SettingsScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 24),
         Text(
-          'Skipper talks only to your Mac over this Wi-Fi. Nothing is sent anywhere else.',
+          voice.cloud
+              ? 'Skipper talks only to your Mac. For Uzbek voice, your Mac sends recordings and answers to Azure AI Speech.'
+              : 'Skipper talks only to your Mac over this Wi-Fi. Nothing is sent anywhere else.',
           textAlign: TextAlign.center,
           style: TextStyle(color: c.faint, fontSize: 12.5),
         ),
