@@ -38,3 +38,16 @@ test('service check does not push an install when Skipper already runs another w
   assert.equal(checkService({ status: none, dashboardUp: false }).fix, 'skipper service install');
   assert.equal(checkService({ status: { installed: true, running: false } }).ok, false);
 });
+
+test('voice check says what is missing when voice is off', async () => {
+  const { checkVoice } = await import('../src/doctor.js');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { mkdtempSync } = await import('node:fs');
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'skipper-voice-doc-'));
+  const off = await checkVoice(dir, { env: { SKIPPER_WHISPER_BIN: '' }, exists: () => false });
+  assert.equal(off.optional, true);
+  assert.match(off.detail, /missing .*edge-tts/);
+  const azure = await checkVoice(dir, { env: { AZURE_SPEECH_KEY: 'k'.repeat(32), AZURE_SPEECH_REGION: 'westeurope' } });
+  assert.match(azure.detail, /Azure AI Speech \(westeurope\)/);
+});

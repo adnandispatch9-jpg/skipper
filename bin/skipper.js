@@ -9,7 +9,7 @@ import { startServer, isLoopback } from '../src/server.js';
 import { writeDemo } from '../src/demo.js';
 import { recordHook, installHooks, uninstallHooks, hooksStatus, readConfig, writeConfig } from '../src/hooks.js';
 import { installService, uninstallService, serviceStatus } from '../src/service.js';
-import { checkNode, checkClaudeDir, checkHooks, checkEvents, checkNative, checkService, checkDashboard, formatReport } from '../src/doctor.js';
+import { checkNode, checkClaudeDir, checkHooks, checkEvents, checkNative, checkVoice, checkService, checkDashboard, formatReport } from '../src/doctor.js';
 import { fileURLToPath } from 'node:url';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -175,6 +175,7 @@ if (argv[0] === 'doctor') {
     await checkHooks(path.join(claudeDir, 'settings.json')),
     await checkEvents(dataDir),
     await checkNative(dataDir),
+    await checkVoice(dataDir),
   ];
   const dashboard = await checkDashboard(port);
   checks.push(checkService({ dashboardUp: dashboard.ok }), dashboard);

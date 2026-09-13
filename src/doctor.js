@@ -1,10 +1,11 @@
 // `skipper doctor`: checks the pieces a working setup depends on and says what
 // to run when one is missing. Each check returns { ok, label, detail, fix }.
 
-import { promises as fs } from 'node:fs';
+import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
 import { hooksStatus, readConfig, eventsFile } from './hooks.js';
 import { serviceStatus } from './service.js';
+import { speechConfig, localVoicePaths } from './speech.js';
 
 export function checkNode(version = process.versions.node) {
   const major = Number(version.split('.')[0]);
@@ -47,6 +48,16 @@ export async function checkNative(dataDir, platform = process.platform) {
   return on
     ? { ok: true, label: 'System notifications', detail: 'on' }
     : { ok: true, optional: true, label: 'System notifications', detail: 'off', fix: 'skipper hooks native on' };
+}
+
+export async function checkVoice(dataDir, { env = process.env, exists = existsSync } = {}) {
+  const label = 'Phone app voice';
+  const config = await speechConfig(dataDir, env);
+  if (config?.provider === 'azure') return { ok: true, label, detail: `Azure AI Speech (${config.region})` };
+  if (config?.provider === 'local') return { ok: true, label, detail: 'local: Whisper on this Mac, answers voiced by edge-tts' };
+  const local = localVoicePaths(dataDir, env);
+  const missing = [!local.whisper && 'whisper-cli', !exists(local.model) && `model ${local.model}`, !exists(local.edgeTts) && `edge-tts at ${local.edgeTts}`].filter(Boolean);
+  return { ok: true, optional: true, label, detail: missing.length ? `off (missing ${missing.join(', ')})` : 'off', fix: 'skipper voice setup --region <azure-region>, or install the local tools' };
 }
 
 export function checkService({ dashboardUp = false, status = serviceStatus() } = {}) {
