@@ -50,3 +50,11 @@ test('the dark tokens in the system media query match the explicit dark theme', 
   const dark = tokens(':root[data-theme="dark"]');
   for (const [key, value] of Object.entries(dark)) assert.equal(media[key], value, `--${key}`);
 });
+
+test('forced-colors mode keeps status dots and chart bars visible', () => {
+  const css = readFileSync(new URL('../public/app.css', import.meta.url), 'utf8');
+  const block = css.slice(css.indexOf('@media (forced-colors: active)'));
+  assert.ok(block.length > 40, 'forced-colors block is missing');
+  for (const selector of ['.dot', '.bar-fill', '.ranked-track i', '.segments i']) assert.ok(block.includes(selector), `${selector} is not covered`);
+  assert.match(block, /forced-color-adjust: none/);
+});

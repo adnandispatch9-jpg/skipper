@@ -865,3 +865,11 @@ button.box:hover { border-color: var(--accent); }
 .quiet-target { flex-basis: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); }
 .meta-line .quiet-warning { font-size: 13px; }
 .meta-line .quiet-target { flex-basis: auto; max-width: 320px; }
+
+/* Windows High Contrast and other forced-color modes drop background colors,
+   which would erase status dots, progress and chart bars. Keep their own colors
+   and outline them in the system text color so they read on any system theme. */
+@media (forced-colors: active) {
+  .dot, .bar i, .bar-fill, .ranked-track i, .segments i, .todo .box { forced-color-adjust: none; box-shadow: 0 0 0 1px CanvasText; }
+  .dot { animation: none; }
+}
