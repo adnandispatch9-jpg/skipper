@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-09-13)
 
+- Sending messages is limited to 5 per minute, and live connections are capped.
+- Animated tour at the top of the README.
 - Usage page: exact token counts per day, project and model (subagents included, each response counted once), with recorded cost only.
 - Every theme's text now meets WCAG AA contrast (4.5:1), checked by a test.
 
