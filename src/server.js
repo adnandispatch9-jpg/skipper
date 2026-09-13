@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { Store } from './store.js';
 import { Notes, Tasks, ActionError, sendMessage } from './actions.js';
 import { eventsFile, hooksStatus } from './hooks.js';
+import { readConversation } from './conversation.js';
+import { Agent } from './agent.js';
+import os from 'node:os';
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
@@ -110,6 +113,10 @@ export async function startServer({
   const remote = !isLoopback(host);
   const accessToken = remote ? token || crypto.randomBytes(18).toString('base64url') : null;
   const clients = new Set();
+  // The voice agent's tool server calls back into this API over loopback with this key.
+  const agentKey = crypto.randomBytes(24).toString('base64url');
+  const agent = new Agent({ claudeBin, agentKey });
+  const askTimes = [];
 
   const broadcast = () => {
     for (const res of clients) res.write('event: change\ndata: {}\n\n');
@@ -175,6 +182,11 @@ export async function startServer({
   // a JSON body, and a same-origin Origin header when the browser sends one.
   function checkWrite(req) {
     if (readOnly) throw new ActionError(403, 'Skipper was started with --read-only');
+    checkJsonRequest(req);
+  }
+
+  // Same protections as writes (custom header, JSON, same origin) for POSTs that change nothing.
+  function checkJsonRequest(req) {
     if (req.headers['x-skipper'] !== '1') throw new ActionError(403, 'Missing X-Skipper header');
     if (!String(req.headers['content-type'] || '').startsWith('application/json')) throw new ActionError(415, 'Use application/json');
     const origin = req.headers.origin;
@@ -227,6 +239,16 @@ export async function startServer({
         if (!session) return json(res, 404, { error: 'Session not found' });
         return json(res, 200, { now: Date.now(), readOnly, session: { ...session, notes: await notes.list(session.id) } });
       }
+      if (url.pathname === '/api/info') {
+        return json(res, 200, { name: os.hostname().replace(/\.local$/, ''), readOnly, agent: Boolean(claudeBin), version: 1 });
+      }
+      if (parts[0] === 'api' && parts[1] === 'sessions' && parts.length === 4 && parts[3] === 'conversation') {
+        if (!store.get(parts[2])) return json(res, 404, { error: 'Session not found' });
+        const file = store.transcriptFile(parts[2]);
+        if (!file) return json(res, 404, { error: 'Transcript not found' });
+        const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 60, 1), 200);
+        return json(res, 200, { now: Date.now(), ...(await readConversation(file, { limit })) });
+      }
       if (url.pathname === '/api/events') {
         if (clients.size >= MAX_EVENT_CLIENTS) return json(res, 503, { error: 'Too many open dashboards' });
         res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
@@ -236,6 +258,44 @@ export async function startServer({
         return;
       }
       return json(res, 404, { error: 'Not found' });
+    }
+
+    if (method === 'POST' && url.pathname === '/api/agent/ask') {
+      checkJsonRequest(req);
+      const body = await readBody(req);
+      const text = typeof body.text === 'string' ? body.text.trim() : '';
+      if (!text || text.length > 4000) return json(res, 400, { error: 'Ask a question of up to 4000 characters' });
+      const t = Date.now();
+      while (askTimes.length && t - askTimes[0] > 60_000) askTimes.shift();
+      if (askTimes.length >= 20) return send(res, 429, JSON.stringify({ error: 'Too many questions in a minute' }), undefined, { 'Retry-After': '20' });
+      askTimes.push(t);
+      res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
+      const controller = new AbortController();
+      res.on('close', () => controller.abort());
+      await agent.ask({
+        conversationId: body.conversationId,
+        text,
+        signal: controller.signal,
+        onEvent: (event) => {
+          if (res.writableEnded) return;
+          if (event.type === 'proposal' && readOnly) return;
+          const { type, ...data } = event;
+          res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+        },
+      });
+      if (!res.writableEnded) res.end();
+      return;
+    }
+    if (method === 'POST' && url.pathname === '/api/agent/confirm') {
+      checkWrite(req);
+      const body = await readBody(req);
+      const proposal = agent.takeProposal(String(body.proposalId || ''));
+      if (!proposal) return json(res, 404, { error: 'That proposal expired. Ask again.' });
+      const session = store.get(proposal.sessionId);
+      if (!session) return json(res, 404, { error: 'Session not found' });
+      const result = await sendMessage({ session, message: proposal.text, claudeBin });
+      log(`agent message sent to ${session.id}`);
+      return json(res, 200, result);
     }
 
     if (!WRITE_METHODS.has(method)) {
@@ -297,7 +357,11 @@ export async function startServer({
         return send(res, 421, 'Misdirected request', 'text/plain; charset=utf-8');
       }
 
-      if (remote) {
+      const loopbackPeer = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+      const agentCall = loopbackPeer && req.method === 'GET' && safeEqual(req.headers['x-skipper-agent-key'] ?? '', agentKey);
+      const bearer = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1];
+
+      if (remote && !agentCall && !(bearer && safeEqual(bearer, accessToken))) {
         const given = url.searchParams.get('token');
         if (req.method === 'GET' && given && safeEqual(given, accessToken)) {
           return send(res, 302, '', 'text/plain', {
@@ -323,6 +387,7 @@ export async function startServer({
     server.once('error', reject);
     server.listen(port, host, resolve);
   });
+  agent.baseUrl = `http://127.0.0.1:${server.address().port}`;
   await ready;
 
   const close = () =>

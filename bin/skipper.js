@@ -83,6 +83,13 @@ const home = os.homedir();
 const defaultDataDir = () => path.resolve(expandHome(process.env.SKIPPER_DATA_DIR ?? path.join(home, '.skipper')));
 const defaultClaudeDir = () => path.resolve(expandHome(process.env.CLAUDE_CONFIG_DIR ?? path.join(home, '.claude')));
 
+// Started by the voice agent's Claude Code process: serves Skipper's read-only tools over stdio.
+if (argv[0] === 'mcp') {
+  const { serveStdio } = await import('../src/mcp.js');
+  serveStdio();
+  await new Promise(() => {});
+}
+
 // Called by Claude Code itself (see `skipper hooks install`): record and exit quickly.
 if (argv[0] === 'hook') {
   let input = '';

@@ -391,6 +391,14 @@ export class Store {
     return runs.sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
   }
 
+  transcriptFile(id) {
+    let best = null;
+    for (const [file, { summary }] of this.files) {
+      if (summary.id === id && (!best || (summary.updatedAt ?? 0) > (best.summary.updatedAt ?? 0))) best = { file, summary };
+    }
+    return best?.file ?? null;
+  }
+
   #summaries() {
     const byId = new Map();
     for (const { summary } of this.files.values()) {

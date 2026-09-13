@@ -1,0 +1,189 @@
+// The voice agent: headless Claude Code with only Skipper's read-only tools.
+// Each question starts `claude -p` and streams its answer back as small events.
+
+import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const BIN = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'skipper.js');
+const TOOL_PREFIX = 'mcp__skipper__';
+const MAX_TURNS_KEPT = 8;
+const CONVERSATION_TTL_MS = 60 * 60_000;
+const ANSWER_TIMEOUT_MS = 120_000;
+
+export const SYSTEM_PROMPT = `You are Skipper, a voice assistant for someone who runs many Claude Code sessions on their Mac. They talk to you from their phone and hear your answers read aloud.
+
+You can see everything Skipper sees through your tools: every session and its state, plans, task lists, subagents, loops, workflows, background sessions, pull requests, recent activity and token usage.
+
+How to answer:
+- Always look before answering. Call list_sessions first, then drill into specific sessions, conversations or activity as needed. Never guess or invent state.
+- Speak naturally and briefly: two to four short sentences unless asked for detail. No markdown, no bullet points, no code blocks, no emoji, no URLs, no session ids.
+- Name sessions by their title. Say times in words ("for about 20 minutes", "at half past three").
+- Put what needs the user first: permission prompts, then questions, then finished work, then what is still running.
+- State meanings: permission = waiting for the user to approve a tool in the terminal; waiting = finished its turn and waiting for the user; working = running now; sleeping = a loop waiting for its next wakeup; ended = no longer running.
+- If the user asks you to tell a session something, call propose_message with the exact text. Nothing is sent until they confirm, so say you have prepared it for them to confirm.
+- You cannot approve permission prompts; say they must be answered in the terminal on the Mac.`;
+
+export function agentArgs({ mcpConfig, model }) {
+  const args = [
+    '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
+    '--no-session-persistence', '--strict-mcp-config', '--mcp-config', JSON.stringify(mcpConfig),
+    '--tools', '', '--allowedTools', `${TOOL_PREFIX}list_sessions,${TOOL_PREFIX}get_session,${TOOL_PREFIX}get_conversation,${TOOL_PREFIX}get_activity,${TOOL_PREFIX}get_usage,${TOOL_PREFIX}propose_message`,
+    '--setting-sources', '', '--system-prompt', SYSTEM_PROMPT,
+  ];
+  if (model) args.push('--model', model);
+  return args;
+}
+
+export function promptWithHistory(history, text) {
+  if (!history.length) return text;
+  const lines = history.map((turn) => `${turn.role === 'user' ? 'User' : 'You'}: ${turn.text}`);
+  return `Earlier in this voice conversation:\n${lines.join('\n')}\n\nThe user now says: ${text}`;
+}
+
+const STATUS = {
+  list_sessions: 'Looking at your sessions',
+  get_session: 'Reading a session',
+  get_conversation: 'Reading a conversation',
+  get_activity: 'Checking recent activity',
+  get_usage: 'Checking usage',
+  propose_message: 'Preparing a message',
+};
+
+// Turns one stream-json line into zero or more agent events.
+export function eventsFromLine(line) {
+  let record;
+  try {
+    record = JSON.parse(line);
+  } catch {
+    return [];
+  }
+  if (record.type === 'stream_event') {
+    const delta = record.event?.delta;
+    if (record.event?.type === 'content_block_delta' && delta?.type === 'text_delta' && delta.text) return [{ type: 'delta', text: delta.text }];
+    return [];
+  }
+  if (record.type === 'assistant' && Array.isArray(record.message?.content)) {
+    const out = [];
+    for (const block of record.message.content) {
+      if (block.type !== 'tool_use' || !String(block.name).startsWith(TOOL_PREFIX)) continue;
+      const name = block.name.slice(TOOL_PREFIX.length);
+      out.push({ type: 'status', text: STATUS[name] || 'Looking' });
+      if (name === 'propose_message' && block.input?.session_id && typeof block.input.text === 'string') {
+        out.push({ type: 'proposal', sessionId: block.input.session_id, text: block.input.text.slice(0, 4000) });
+      }
+    }
+    return out;
+  }
+  if (record.type === 'result') {
+    return [{ type: 'result', text: typeof record.result === 'string' ? record.result : null, error: record.is_error ? String(record.result || 'The agent failed') : null }];
+  }
+  return [];
+}
+
+export class Agent {
+  constructor({ claudeBin = 'claude', baseUrl, agentKey, model = process.env.SKIPPER_AGENT_MODEL || 'haiku', now = Date.now, spawnImpl = spawn }) {
+    Object.assign(this, { claudeBin, baseUrl, agentKey, model, now, spawnImpl });
+    this.conversations = new Map(); // id -> { turns, at }
+    this.proposals = new Map(); // id -> { sessionId, text, at }
+  }
+
+  #conversation(id) {
+    const t = this.now();
+    for (const [key, value] of this.conversations) if (t - value.at > CONVERSATION_TTL_MS) this.conversations.delete(key);
+    for (const [key, value] of this.proposals) if (t - value.at > CONVERSATION_TTL_MS) this.proposals.delete(key);
+    const key = typeof id === 'string' && /^[\w-]{8,64}$/.test(id) ? id : crypto.randomUUID();
+    if (!this.conversations.has(key)) this.conversations.set(key, { turns: [], at: t });
+    return [key, this.conversations.get(key)];
+  }
+
+  takeProposal(id) {
+    const proposal = this.proposals.get(id);
+    this.proposals.delete(id);
+    return proposal || null;
+  }
+
+  // onEvent receives {type: 'conversation'|'status'|'delta'|'proposal'|'done'|'error', ...}.
+  ask({ conversationId, text, onEvent, signal }) {
+    const [id, conversation] = this.#conversation(conversationId);
+    onEvent({ type: 'conversation', id });
+    if (!this.claudeBin) {
+      const answer = 'This is the demo, so there is no agent to ask. On your Mac, Skipper would read your sessions and answer here.';
+      onEvent({ type: 'delta', text: answer });
+      onEvent({ type: 'done', text: answer });
+      return Promise.resolve();
+    }
+    const mcpConfig = {
+      mcpServers: {
+        skipper: { type: 'stdio', command: process.execPath, args: [BIN, 'mcp'], env: { SKIPPER_URL: this.baseUrl, SKIPPER_AGENT_KEY: this.agentKey } },
+      },
+    };
+    const args = [...agentArgs({ mcpConfig, model: this.model }), '--', promptWithHistory(conversation.turns, text)];
+    return new Promise((resolve) => {
+      let child;
+      try {
+        child = this.spawnImpl(this.claudeBin, args, { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, SKIPPER_URL: this.baseUrl } });
+      } catch (error) {
+        onEvent({ type: 'error', message: `Could not start Claude Code: ${error.message}` });
+        resolve();
+        return;
+      }
+      let answer = '';
+      let buffer = '';
+      let stderr = '';
+      let finished = false;
+      const finish = (event) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        if (event.type === 'done') {
+          conversation.turns.push({ role: 'user', text }, { role: 'assistant', text: event.text });
+          conversation.turns.splice(0, Math.max(0, conversation.turns.length - MAX_TURNS_KEPT * 2));
+          conversation.at = this.now();
+        }
+        onEvent(event);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        child.kill('SIGTERM');
+        finish({ type: 'error', message: 'The agent took too long to answer.' });
+      }, ANSWER_TIMEOUT_MS);
+      signal?.addEventListener('abort', () => {
+        child.kill('SIGTERM');
+        finish({ type: 'error', message: 'Stopped.' });
+      });
+      child.stdout.on('data', (chunk) => {
+        buffer += chunk;
+        let index;
+        while ((index = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, index);
+          buffer = buffer.slice(index + 1);
+          for (const event of eventsFromLine(line)) {
+            if (event.type === 'delta') {
+              answer += event.text;
+              onEvent(event);
+            } else if (event.type === 'proposal') {
+              const proposalId = crypto.randomUUID();
+              this.proposals.set(proposalId, { sessionId: event.sessionId, text: event.text, at: this.now() });
+              onEvent({ ...event, id: proposalId });
+            } else if (event.type === 'result') {
+              if (event.error) finish({ type: 'error', message: event.error });
+              else finish({ type: 'done', text: (event.text ?? answer).trim() });
+            } else {
+              onEvent(event);
+            }
+          }
+        }
+      });
+      child.stderr.on('data', (chunk) => {
+        stderr = (stderr + chunk).slice(-2000);
+      });
+      child.on('error', (error) => finish({ type: 'error', message: error.code === 'ENOENT' ? 'Claude Code is not installed on this Mac.' : error.message }));
+      child.on('close', (code) => {
+        if (code === 0 && answer) finish({ type: 'done', text: answer.trim() });
+        else finish({ type: 'error', message: stderr.trim().split('\n').pop() || `Claude Code exited with code ${code}` });
+      });
+    });
+  }
+}
