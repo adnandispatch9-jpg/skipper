@@ -14,7 +14,7 @@ test('app.js parses', () => {
 test('every locally named function that is called is defined', () => {
   const defined = new Set([...source.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => m[1]));
   for (const m of source.matchAll(/\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/g)) defined.add(m[1]);
-  const ours = /^(?:(?:render|queue|session|alert|toggle|sync|apply|focus|wire|run|notify|attention|composer|notes|plan|agents|workflows|loop|links|team)(?:[A-Z]\w*)?|panel|segments|metaItem|chime|confirmButton|load|reload|connect|route|matches|visibleSessions|progress|detailGrid|toast|api|ago|countdown|duration|plain|safeHref|toolName|tick|icon|h|setOffline|onHookAlert|hooksTip|formatAgo|formatCountdown|dayBucket|dayBucketAt|groupActivity|splitAsk)$/;
+  const ours = /^(?:(?:render|queue|session|alert|toggle|sync|apply|focus|wire|run|notify|attention|composer|notes|plan|agents|workflows|loop|links|team)(?:[A-Z]\w*)?|panel|segments|metaItem|chime|confirmButton|load|reload|connect|route|matches|visibleSessions|progress|detailGrid|toast|api|ago|countdown|duration|plain|safeHref|toolName|tick|icon|h|setOffline|onHookAlert|hooksTip|formatAgo|formatCountdown|dayBucket|dayBucketAt|groupActivity|splitAsk|resumeCommand)$/;
   const missing = new Set();
   for (const m of source.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g)) {
     const name = m[1];
@@ -32,7 +32,7 @@ test('index.html references only elements app.js expects', () => {
 
 const helpers = (() => {
   const context = {};
-  vm.runInNewContext(`${logic}\n;globalThis.out = { formatAgo, formatCountdown, duration, safeHref, toolName, plain, splitAsk, dayBucketAt, groupActivity };`, context);
+  vm.runInNewContext(`${logic}\n;globalThis.out = { resumeCommand, formatAgo, formatCountdown, duration, safeHref, toolName, plain, splitAsk, dayBucketAt, groupActivity };`, context);
   return context.out;
 })();
 
@@ -70,4 +70,12 @@ test('interleaved loop ticks merge per session and time group', () => {
   const items = [tick('a', 1), tick('b', 2), tick('a', 5), { at: now - 6 * 60_000, kind: 'pr', sessionId: 'a' }, tick('b', 7), tick('a', 90)];
   const grouped = helpers.groupActivity(items, (at) => helpers.dayBucketAt(at, now));
   assert.deepEqual(JSON.parse(JSON.stringify(grouped.map((g) => [g.sessionId, g.kind, g.count]))), [['a', 'loop', 2], ['b', 'loop', 2], ['a', 'pr', 1], ['a', 'loop', 1]]);
+});
+
+test('resume command cds into the project and quotes unusual paths', () => {
+  const id = '11111111-2222-4333-8444-555555555555';
+  assert.equal(helpers.resumeCommand({ id, cwd: '/Users/me/code/storefront' }), `cd /Users/me/code/storefront && claude --resume ${id}`);
+  assert.equal(helpers.resumeCommand({ id, cwd: "/Users/me/my app's" }), `cd '/Users/me/my app'\\''s' && claude --resume ${id}`);
+  assert.equal(helpers.resumeCommand({ id, cwd: null }), `claude --resume ${id}`);
+  assert.equal(helpers.resumeCommand(null), null);
 });

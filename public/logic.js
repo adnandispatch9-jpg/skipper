@@ -80,3 +80,12 @@ function groupActivity(items, bucket) {
   }
   return out;
 }
+
+// Shell command that reopens a session where it ran. Quotes the path for POSIX shells.
+function resumeCommand(session) {
+  if (!session?.id) return null;
+  const resume = `claude --resume ${session.id}`;
+  if (!session.cwd) return resume;
+  const quoted = /^[\w@%+=:,./~-]+$/.test(session.cwd) ? session.cwd : `'${session.cwd.replace(/'/g, `'\\''`)}'`;
+  return `cd ${quoted} && ${resume}`;
+}

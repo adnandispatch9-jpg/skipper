@@ -885,6 +885,7 @@ function renderDetail(d) {
           d.pid ? h('span', { class: 'meta mono faint' }, `pid ${d.pid}`) : null)),
       h('div', { class: 'head-actions' },
         pr && safeHref(pr.url) ? h('a', { class: 'btn', href: safeHref(pr.url), target: '_blank', rel: 'noopener noreferrer' }, icon('pr'), pr.number ? `PR #${pr.number}` : 'Pull request') : null,
+        !d.live ? h('button', { class: 'btn', type: 'button', title: resumeCommand(d), dataset: { action: 'copy', text: resumeCommand(d), copied: 'Resume command copied. Paste it into a terminal.' } }, icon('copy'), 'Resume') : null,
         state.readOnly ? null : h('button', { class: 'btn primary', type: 'button', dataset: { action: 'focus-composer' } }, icon('send'), 'Message'))),
     detailGrid(
       [attentionPanel(d), nowPanel, planPanel(d), agentsPanel(d), composerPanel(d)],
@@ -1057,7 +1058,7 @@ async function runAction(action, el, form) {
           } catch {}
           area.remove();
         }
-        toast(copied ? 'Command copied' : 'Copy is not available here. Select the command instead.', copied ? '' : 'error');
+        toast(copied ? el.dataset.copied || 'Command copied' : 'Copy is not available here. Select the command instead.', copied ? '' : 'error');
         return;
       }
       case 'dismiss-tip':
