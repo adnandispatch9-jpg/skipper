@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-09-13)
 
+- Refreshes do less work: subagent metadata is read once (62 file reads per refresh down to 5).
+- Projects show as a scrollable chip row on phones.
 - Working sessions show how long the turn has run, and warn after five quiet minutes.
 - Session pages show that session's token totals, subagents included.
 - `skipper hooks native on` sends system notifications for permission prompts and questions, even with no dashboard open.
