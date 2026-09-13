@@ -2,7 +2,8 @@
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { readFileSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, rmSync, existsSync, mkdirSync, appendFileSync } from 'node:fs';
+import { format } from 'node:util';
 import { startServer, isLoopback } from '../src/server.js';
 import { writeDemo } from '../src/demo.js';
 import { recordHook, installHooks, uninstallHooks, hooksStatus, readConfig, writeConfig } from '../src/hooks.js';
@@ -19,7 +20,7 @@ Usage: skipper [options]
        skipper hooks uninstall  Remove Skipper's Claude Code hooks
        skipper hooks status
        skipper hooks native on|off  System notifications for permission prompts, even with no dashboard open
-       skipper service install  Keep Skipper running in the background (macOS, Linux)
+       skipper service install  Keep Skipper running in the background (macOS, Linux, Windows)
        skipper service uninstall
        skipper service status
        skipper doctor           Check that everything is set up and working
@@ -33,6 +34,7 @@ Options:
       --demo             Serve fictional sample sessions (try it without Claude data)
       --read-only        Disable messages, notes and task edits
       --data-dir <dir>   Where Skipper keeps its own notes (default ~/.skipper)
+      --log-dir <dir>    Append output to out.log and errors to err.log in <dir>
   -v, --version          Print the version
   -h, --help             Show this help
 `;
@@ -55,6 +57,7 @@ function parseArgs(argv) {
     else if (arg === '-p' || arg === '--port') opts.port = value();
     else if (arg === '--host') opts.host = value();
     else if (arg === '--claude-dir') opts.claudeDir = value();
+    else if (arg === '--log-dir') opts.logDir = value();
     else fail(`Unknown option: ${arg}\n\n${HELP}`);
   }
   return opts;
@@ -191,6 +194,24 @@ if (opts.help) {
 if (opts.version) {
   console.log(pkg.version);
   process.exit(0);
+}
+
+// A background service has no terminal, so --log-dir sends output to files instead.
+if (opts.logDir) {
+  const dir = path.resolve(expandHome(opts.logDir));
+  mkdirSync(dir, { recursive: true });
+  // Synchronous appends, so a message written just before process.exit is never lost.
+  const write = (file, text) => {
+    try {
+      appendFileSync(path.join(dir, file), text);
+    } catch {}
+  };
+  console.log = (...args) => write('out.log', `${format(...args)}\n`);
+  console.warn = console.error = (...args) => write('err.log', `${new Date().toISOString()} ${format(...args)}\n`);
+  process.on('uncaughtException', (error) => {
+    write('err.log', `${new Date().toISOString()} ${error.stack || error}\n`);
+    process.exit(1);
+  });
 }
 
 const port = Number(opts.port ?? process.env.PORT ?? 4317);

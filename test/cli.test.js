@@ -71,3 +71,12 @@ test('doctor reports problems and exits non-zero when hooks are missing', () => 
   assert.match(r.stdout, /→ skipper hooks install/);
   assert.ok(!existsSync(path.join(env.SKIPPER_DATA_DIR, 'events.jsonl')));
 });
+
+test('--log-dir writes startup output and errors to files', () => {
+  const { env } = sandbox();
+  const logs = path.join(env.SKIPPER_DATA_DIR, 'logs');
+  const r = run(['--port', 'nope', '--log-dir', logs], env);
+  assert.equal(r.status, 1);
+  assert.equal(r.stderr, '', 'nothing goes to the terminal');
+  assert.match(readFileSync(path.join(logs, 'err.log'), 'utf8'), /Invalid port: nope/);
+});

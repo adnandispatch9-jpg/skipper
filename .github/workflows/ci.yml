@@ -17,3 +17,17 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: node --test test/transcript.test.js test/server.test.js test/hooks.test.js test/store.test.js test/frontend.test.js test/service.test.js test/contrast.test.js test/doctor.test.js test/cli.test.js test/startup.test.js
+      - name: Background service on Windows (install, answer, uninstall)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          node bin/skipper.js service install --port 4391
+          node bin/skipper.js service status
+          $ok = $false
+          for ($i = 0; $i -lt 40 -and -not $ok; $i++) {
+            try { $ok = (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:4391/api/sessions).StatusCode -eq 200 } catch { Start-Sleep -Milliseconds 500 }
+          }
+          Get-Content "$env:LOCALAPPDATA\skipper\logs\*.log" -ErrorAction SilentlyContinue
+          node bin/skipper.js service uninstall
+          if (-not $ok) { throw 'The scheduled task did not start Skipper' }
+          if ((node bin/skipper.js service status) -notmatch 'Not installed') { throw 'uninstall left the task behind' }
