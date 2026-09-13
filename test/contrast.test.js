@@ -58,3 +58,9 @@ test('forced-colors mode keeps status dots and chart bars visible', () => {
   for (const selector of ['.dot', '.bar-fill', '.ranked-track i', '.segments i']) assert.ok(block.includes(selector), `${selector} is not covered`);
   assert.match(block, /forced-color-adjust: none/);
 });
+
+test('the pairing QR code is not painted over by the global icon stroke', () => {
+  const css = readFileSync(new URL('../public/app.css', import.meta.url), 'utf8');
+  assert.match(css, /svg \{[^}]*stroke: currentColor/, 'icons still get their stroke');
+  assert.match(css, /\.qr \* \{ stroke: none; \}/, 'QR modules must not inherit the icon stroke');
+});

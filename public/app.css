@@ -882,6 +882,7 @@ button.box:hover { border-color: var(--accent); }
 .phone form { display: flex; flex-direction: column; gap: 12px; }
 .phone-note { margin: 0; color: var(--muted); line-height: 1.5; }
 .phone-note.faint { color: var(--faint); font-size: 12.5px; }
-.qr { display: block; width: min(260px, 100%); height: auto; margin: 4px auto; border-radius: 12px; }
+.qr { display: block; width: min(260px, 100%); height: auto; margin: 4px auto; border-radius: 12px; stroke: none; }
+.qr * { stroke: none; }
 .qr-bg { fill: #ffffff; }
 .qr-dots { fill: #111111; }
