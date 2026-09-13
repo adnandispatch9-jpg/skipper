@@ -129,6 +129,18 @@ export async function startServer({
     },
   });
   const askTimes = [];
+  const voiceTimes = [];
+  // Cloud voice spends quota on the user's own speech key; keep a runaway client from draining it.
+  const voiceLimited = (res) => {
+    const t = Date.now();
+    while (voiceTimes.length && t - voiceTimes[0] > 60_000) voiceTimes.shift();
+    if (voiceTimes.length >= 30) {
+      send(res, 429, JSON.stringify({ error: 'Too many voice requests in a minute' }), undefined, { 'Retry-After': '20' });
+      return true;
+    }
+    voiceTimes.push(t);
+    return false;
+  };
 
   const broadcast = () => {
     for (const res of clients) res.write('event: change\ndata: {}\n\n');
@@ -301,6 +313,7 @@ export async function startServer({
 
     if (method === 'POST' && url.pathname === '/api/voice/transcribe') {
       checkSkipperRequest(req);
+      if (voiceLimited(res)) return;
       if (!String(req.headers['content-type'] || '').startsWith('audio/wav')) throw new ActionError(415, 'Send 16 kHz mono audio/wav');
       const lang = url.searchParams.get('language');
       const languages = LANGUAGES.includes(lang) ? [lang] : LANGUAGES;
@@ -314,6 +327,7 @@ export async function startServer({
     }
     if (method === 'POST' && url.pathname === '/api/voice/speak') {
       checkJsonRequest(req);
+      if (voiceLimited(res)) return;
       const body = await readBody(req);
       try {
         const { audio, language } = await synthesize(await speechConfig(skipperDir), body.text, { language: body.language });

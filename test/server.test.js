@@ -353,3 +353,11 @@ test('background sessions are marked so they are not mistaken for terminals', as
   assert.equal(sessions.find((s) => s.title === 'Checkout flow redesign').background, false);
   assert.equal(sessions.filter((s) => !s.live).every((s) => s.background === false), true);
 });
+
+test('voice requests are rate limited to protect the speech key', async () => {
+  const speak = () => fetch(`${base}/api/voice/speak`, { method: 'POST', headers: { 'X-Skipper': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'hi' }) });
+  const statuses = [];
+  for (let i = 0; i < 31; i++) statuses.push((await speak()).status);
+  assert.ok(statuses.slice(0, 30).every((s) => s !== 429), `limited too early: ${statuses}`);
+  assert.equal(statuses[30], 429);
+});
