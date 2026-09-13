@@ -535,7 +535,7 @@ button.box:hover { border-color: var(--accent); }
 .card-foot-right { display: flex; gap: 10px; }
 .card-foot .meta { font-size: 12.5px; }
 .meta.accent { color: var(--accent); }
-.overview .row { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 110px 80px 80px; }
+.overview .row { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 110px 80px; }
 .overview .row .dim svg { width: 13px; height: 13px; vertical-align: -2px; }
 
 @media (max-width: 900px) {

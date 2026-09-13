@@ -26,6 +26,7 @@ export function createSummary(sessionId) {
     lastText: null,
     lastTextAt: null,
     lastTool: null,
+    askedAt: [], // times Claude opened a multiple-choice question (AskUserQuestion)
     todos: [],
     todosAt: null,
     agents: new Map(),
@@ -76,6 +77,10 @@ function applyToolUse(s, block, at) {
   const input = block.input || {};
   const target = input.file_path || input.notebook_path || input.command || input.pattern || input.url || input.query || input.description || input.skill || null;
   s.lastTool = { id: block.id, name: block.name, at, target: typeof target === 'string' ? clip(target.split('\n')[0], 160) : null, pending: true };
+  if (block.name === 'AskUserQuestion' && Number.isFinite(at)) {
+    s.askedAt.push(at);
+    if (s.askedAt.length > 50) s.askedAt.shift();
+  }
 
   if (block.name === 'TodoWrite' && Array.isArray(input.todos)) {
     s.todos = input.todos.map((t) => ({

@@ -88,3 +88,8 @@ test('the last tool is pending until its result arrives', () => {
   applyRecord(s, { type: 'user', timestamp: at(3), message: { content: [{ type: 'tool_result', tool_use_id: 'b9' }] } });
   assert.equal(s.lastTool.pending, false);
 });
+
+test('multiple-choice questions are remembered so their notifications read as questions', () => {
+  const s = fold([tool('AskUserQuestion', { questions: [] }, 'q1', 3), tool('Bash', { command: 'ls' }, 'b1', 4)]);
+  assert.deepEqual(s.askedAt, [Date.parse(at(3))]);
+});

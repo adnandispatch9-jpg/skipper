@@ -70,3 +70,32 @@ test('a session file that briefly fails to parse keeps the session live', async 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('a "needs your permission" notification right after a question is shown as a question', async () => {
+  const { writeDemo } = await import('../src/demo.js');
+  const { Store } = await import('../src/store.js');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { rmSync, appendFileSync, writeFileSync } = await import('node:fs');
+  const dir = path.join(os.tmpdir(), `skipper-question-${process.pid}`);
+  await writeDemo(dir);
+  const events = path.join(dir, 'events.jsonl');
+  writeFileSync(events, '');
+  try {
+    const store = new Store(dir, { eventsFile: events });
+    await store.refresh();
+    const target = store.list().find((s) => s.title === 'Fix flaky webhook retries');
+    const [file] = [...store.files.entries()].find(([, e]) => e.summary.id === target.id);
+    const now = Date.now();
+    appendFileSync(file, `${JSON.stringify({ type: 'assistant', timestamp: new Date(now).toISOString(), message: { id: 'msg_q', content: [{ type: 'tool_use', id: 'toolu_q', name: 'AskUserQuestion', input: { questions: [] } }] } })}\n`);
+    appendFileSync(events, `${JSON.stringify({ at: now + 500, sessionId: target.id, kind: 'permission', message: 'Claude needs your permission' })}\n`);
+    await store.refresh();
+    const s = store.list().find((x) => x.id === target.id);
+    assert.equal(s.attention.kind, 'question');
+    assert.equal(store.drainAlerts().find((a) => a.sessionId === target.id).kind, 'question');
+    assert.ok(store.activity().some((i) => i.sessionId === target.id && i.kind === 'question'));
+    assert.ok(!store.activity().some((i) => i.sessionId === target.id && i.kind === 'permission' && i.at === now + 500));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

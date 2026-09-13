@@ -56,16 +56,16 @@ Running several Claude Code agents at once is powerful and hard to follow. One t
 - **`/loop` countdowns.** See when a self-paced loop wakes next and why it went to sleep.
 - **Workflows, PRs and artifacts.** Multi-agent workflow runs, linked pull requests and published artifacts, one click away.
 - **Activity feed.** What happened while you were away, across every session: permission prompts, finished turns, loop ticks, subagents, PRs and workflow runs, with unread markers and filters.
-- **Usage and history.** Exact token counts per day, project and model, plus recorded cost, turns and lines changed for every session.
+- **Usage and history.** Exact token counts per day, project and model, plus turns and lines changed for every session.
 - **Permission alerts with sound.** The moment Claude asks to run a command or edit a file, Skipper plays a chime, shows a desktop notification and moves the session to **Needs permission**.
 - **Light on the network.** Responses are gzipped and static files are cached with ETags, which keeps phone access over Wi-Fi quick.
 - **Accessible.** Every theme meets WCAG AA contrast (checked by a test), motion respects reduced-motion settings, and status colors stay visible in Windows High Contrast.
 
 ## Usage without guesswork
 
-<img src="docs/screenshots/usage-dark.png" alt="Usage page: output and input tokens, subagent share, recorded cost, output tokens per day, and breakdowns by project and model" width="100%">
+<img src="docs/screenshots/usage-dark.png" alt="Usage page: output and input tokens, subagent share, sessions, output tokens per day, and breakdowns by project and model" width="100%">
 
-Exact token counts from every response, including subagents, per day, project and model. Skipper counts each response once and never estimates prices: dollar cost appears only where Claude Code recorded it, as a whole-session total for sessions active in the chosen range. **CSV** downloads the tokens per day for that range, ready for a spreadsheet.
+Exact token counts from every response, including subagents, per day, project and model. Skipper counts each response once and shows no dollar amounts, because on a Pro or Max plan you pay the subscription, not per token. **CSV** downloads the tokens per day for that range, ready for a spreadsheet.
 
 ## Steer, not just watch
 
@@ -161,7 +161,7 @@ Claude Code already records everything Skipper needs on your disk:
 
 | Source | What Skipper reads |
 | --- | --- |
-| `~/.claude/projects/*/<session>.jsonl` | Titles, prompts, latest messages, todo lists, subagents, loops, workflows, PRs, cost |
+| `~/.claude/projects/*/<session>.jsonl` | Titles, prompts, latest messages, todo lists, subagents, loops, workflows, PRs, lines changed |
 | `~/.claude/projects/*/<session>/subagents`, `/workflows` | Subagent names, models, worktrees; workflow run results |
 | `~/.claude/sessions/*.json` | Which sessions are live, and whether they are busy or idle |
 | `~/.claude/tasks`, `~/.claude/teams` | Task lists and agent teams |

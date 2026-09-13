@@ -612,7 +612,7 @@ function renderUsage() {
   const head = h('div', { class: 'page-head usage-head' },
     h('div', {},
       h('h1', {}, 'Usage'),
-      h('p', { class: 'lede' }, 'Tokens are counted from every response, including subagents, on the day they happened. Dollar cost appears only where Claude Code recorded it, as a total for the whole session.')),
+      h('p', { class: 'lede' }, 'Tokens are counted from every response, including subagents, on the day they happened.')),
     h('div', { class: 'usage-actions' },
       h('div', { class: 'segmented usage-range', role: 'tablist', 'aria-label': 'Time range' },
         USAGE_RANGES.map(([days, label]) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(state.usageDays === days), dataset: { usageDays: String(days) } }, label))),
@@ -648,7 +648,7 @@ function renderUsage() {
       tile('Output tokens', formatTokens(t.output), change == null ? null : `${change >= 0 ? '+' : ''}${change}% vs previous ${u.days === 1 ? 'day' : `${u.days} days`}`),
       tile('Input tokens', formatTokens(t.input), t.input ? `${Math.round((t.cacheRead / t.input) * 100)}% served from cache` : null),
       tile('Subagents', t.output ? `${Math.round((t.subagentOutput / t.output) * 100)}%` : '0%', 'of output tokens'),
-      tile('Recorded cost', t.costSessions ? `$${t.recordedCost.toFixed(2)}` : '—', t.costSessions ? `whole-session totals of ${t.costSessions} session${t.costSessions === 1 ? '' : 's'} active in this range` : 'none recorded in this range')),
+      tile('Sessions', String(t.sessions), `active in this range`)),
     h('section', { class: 'panel chart-panel' },
       h('div', { class: 'panel-head' }, h('h2', {}, 'Output tokens per day'), h('span', { class: 'meta', id: 'chart-readout', 'aria-live': 'polite' }, 'Hover a bar for details')),
       h('div', { class: 'chart' },
@@ -660,7 +660,7 @@ function renderUsage() {
         h('caption', {}, 'Output tokens per day'),
         h('tbody', {}, u.perDay.map((d) => h('tr', {}, h('th', {}, dayLabel(d.day, true)), h('td', {}, d.output)))))),
     h('div', { class: 'usage-grid' }, ranked('By project', u.byProject), ranked('By model', u.byModel)),
-    h('p', { class: 'hint usage-note' }, 'Skipper does not estimate prices. Token counts are exact; costs come only from Claude Code’s own records.'),
+    h('p', { class: 'hint usage-note' }, 'Token counts are exact. Skipper shows no dollar amounts: on a Pro or Max plan you pay the subscription, not per token.'),
   );
 }
 
@@ -709,7 +709,6 @@ function renderOverview() {
           h('span', { class: 'title' }, s.title),
           h('span', { class: 'dim hide-sm' }, s.project),
           h('span', { class: 'dim hide-sm' }, s.prCount ? [icon('pr'), ` ${s.prCount} PR`] : '—'),
-          h('span', { class: 'num hide-sm mono' }, s.costUsd != null ? `$${s.costUsd.toFixed(2)}` : ''),
           h('span', { class: 'num' }, relTime(s.updatedAt)),
         ),
       )),
@@ -957,7 +956,6 @@ function renderDetail(d) {
     d.startedAt && d.updatedAt ? duration(d.updatedAt - d.startedAt) : null,
     d.turns ? `${d.turns} turn${d.turns === 1 ? '' : 's'}` : null,
     d.tokens ? `${formatTokens(d.tokens.output)} output tokens` : null,
-    d.cost ? `$${d.cost.usd.toFixed(2)}` : null,
   ].filter(Boolean);
   const tokenTitle = d.tokens
     ? `${formatTokens(d.tokens.output)} output and ${formatTokens(d.tokens.input)} input tokens over ${d.tokens.responses} responses; ${Math.round((d.tokens.subagentOutput / Math.max(1, d.tokens.output)) * 100)}% of output from subagents, ${Math.round((d.tokens.cacheRead / Math.max(1, d.tokens.input)) * 100)}% of input from cache`

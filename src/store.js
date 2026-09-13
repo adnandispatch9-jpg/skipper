@@ -263,7 +263,8 @@ export class Store {
     const alerts = this.pendingAlerts.splice(0);
     return alerts.map((event) => {
       const s = this.list().find((x) => x.id === event.sessionId);
-      return { ...event, title: s?.title ?? event.sessionId.slice(0, 8), project: s?.project ?? null };
+      const kind = this.#eventKind(event, this.#summaries().get(event.sessionId));
+      return { ...event, kind, title: s?.title ?? event.sessionId.slice(0, 8), project: s?.project ?? null };
     });
   }
 
@@ -272,6 +273,13 @@ export class Store {
     if (!event || !live) return null;
     // Any transcript activity after the prompt means it was answered.
     return (s.updatedAt ?? 0) <= event.at ? event : null;
+  }
+
+  // Claude Code reports a multiple-choice question as a generic "needs your permission"
+  // notification. If Claude opened a question just before, call it a question.
+  #eventKind(event, s) {
+    if (event.kind !== 'permission' || !s?.askedAt?.length) return event.kind;
+    return s.askedAt.some((t) => event.at - t >= -5_000 && event.at - t <= 120_000) ? 'question' : 'permission';
   }
 
   async #readLive() {
@@ -423,11 +431,10 @@ export class Store {
         agentsTotal: agents.length,
         loop: live && loopSleeping(s.loop, s.lastPromptAt, this.now()) ? { wakeAt: s.loop.wakeAt, reason: s.loop.reason } : null,
         prCount: s.prs.size,
-        costUsd: s.cost?.usd ?? null,
         team: this.teams.get(s.id)?.name ?? null,
         attention: (() => {
           const event = this.#pendingAttention(s, live);
-          return event ? { kind: event.kind, message: event.message, at: event.at } : null;
+          return event ? { kind: this.#eventKind(event, s), message: event.message, at: event.at } : null;
         })(),
       });
     }
@@ -451,8 +458,9 @@ export class Store {
     for (const event of this.events) if (event.kind === 'done') newestDone.set(event.sessionId, event);
     for (const event of this.events) {
       const s = summaries.get(event.sessionId);
-      if (event.kind === 'permission') push(event.sessionId, event.at, 'permission', 'Permission asked', event.message);
-      else if (event.kind === 'question') push(event.sessionId, event.at, 'question', 'Claude asked you something', event.message);
+      const kind = this.#eventKind(event, s);
+      if (kind === 'permission') push(event.sessionId, event.at, 'permission', 'Permission asked', event.message);
+      else if (kind === 'question') push(event.sessionId, event.at, 'question', 'Claude asked you something', event.message);
       else if (event.kind === 'idle') push(event.sessionId, event.at, 'waiting', 'Waiting for your input', null);
       else if (event.kind === 'done') {
         // A turn that scheduled a wakeup shortly before it ended is a loop tick.
@@ -475,7 +483,7 @@ export class Store {
       for (const run of this.extras.get(s.id)?.workflows.values() || []) {
         if (run.startedAt && run.durationMs != null) push(s.id, run.startedAt + run.durationMs, 'workflow', `Workflow ${run.status || 'finished'}`, [run.name, run.agentCount != null ? `${run.agentCount} agents` : null].filter(Boolean).join(' · '));
       }
-      if (!this.live.has(s.id) && s.updatedAt) push(s.id, s.updatedAt, 'ended', 'Session ended', s.cost ? `$${s.cost.usd.toFixed(2)}` : null);
+      if (!this.live.has(s.id) && s.updatedAt) push(s.id, s.updatedAt, 'ended', 'Session ended', s.cost?.linesAdded || s.cost?.linesRemoved ? `+${s.cost.linesAdded} −${s.cost.linesRemoved} lines` : null);
     }
     return items.sort((a, b) => b.at - a.at).slice(0, limit);
   }
@@ -526,18 +534,12 @@ export class Store {
     for (const s of summaries.values()) for (const u of s.usage.values()) count(s.id, u, false);
     for (const entry of this.subagentFiles.values()) for (const u of entry.usage.values()) count(entry.sessionId, u, true);
 
-    let recordedCost = 0;
-    let costSessions = 0;
-    for (const s of summaries.values()) {
-      if (s.cost && s.updatedAt >= start) {
-        recordedCost += s.cost.usd;
-        costSessions += 1;
-      }
-    }
+    let sessions = 0;
+    for (const s of summaries.values()) if (s.updatedAt >= start) sessions += 1;
     const ranked = (map) => [...map.entries()].map(([name, output]) => ({ name, output })).filter((r) => r.output > 0).sort((a, b) => b.output - a.output);
     return {
       days,
-      totals: { ...totals, recordedCost, costSessions },
+      totals: { ...totals, sessions },
       perDay: [...perDay.values()],
       byProject: ranked(byProject),
       byModel: ranked(byModel),
@@ -584,7 +586,7 @@ export class Store {
       loopDetail: s.loop,
       prs: [...s.prs.values()],
       artifacts: [...s.artifacts.values()],
-      cost: s.cost,
+      cost: s.cost ? { linesAdded: s.cost.linesAdded, linesRemoved: s.cost.linesRemoved } : null,
       tokens: this.#sessionTokens(s),
       team: this.teams.get(id) ?? null,
     };
