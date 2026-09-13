@@ -2,7 +2,7 @@
 // to the Mac. Two providers:
 //  - azure: Azure AI Speech with a key (best Uzbek recognition; free tier 5 h + 0.5M chars a month)
 //  - local: no account at all. Whisper (whisper.cpp) recognizes on the Mac, and the neural voices
-//    are read with the edge-tts tool. Set up with `skipper voice setup --free`.
+//    are read with the edge-tts tool. Used automatically when those tools and the model are installed.
 
 import { promises as fs, existsSync } from 'node:fs';
 import os from 'node:os';

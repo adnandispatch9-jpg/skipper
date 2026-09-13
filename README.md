@@ -104,7 +104,7 @@ Skipper prints a link with an access token for every network address. Open it on
 
 To keep it reachable in the background, install the service with `skipper service install --host 0.0.0.0`.
 
-**iPhone app.** The Flutter app in [`mobile/`](mobile/) pairs by scanning the QR code from the dashboard's phone button, and adds a voice assistant that answers questions about your sessions in English or Uzbek. Nothing it drafts is sent to a session until you confirm. Voice is optional. Skipper uses free local voice automatically when `whisper-cli` (whisper.cpp) with a `ggml-base.bin` model and `edge-tts` in `~/.skipper/voice-venv` are installed; otherwise run `skipper voice setup --region <azure-region>` for Azure AI Speech.
+**iPhone app.** The Flutter app in [`mobile/`](mobile/) pairs by scanning the QR code from the dashboard's phone button, and adds a voice assistant that answers questions about your sessions in English or Uzbek. Nothing it drafts is sent to a session until you confirm. Voice is optional. Skipper uses free local voice automatically when `whisper-cli` (whisper.cpp), the `ggml-large-v3-turbo-q5_0.bin` model in `~/.skipper/models` and `edge-tts` in `~/.skipper/voice-venv` are installed; otherwise run `skipper voice setup --region <azure-region>` for Azure AI Speech.
 
 ## Never miss a permission prompt
 
