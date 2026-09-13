@@ -877,3 +877,11 @@ button.box:hover { border-color: var(--accent); }
   .dot, .bar i, .bar-fill, .ranked-track i, .segments i, .todo .box { forced-color-adjust: none; box-shadow: 0 0 0 1px CanvasText; }
   .dot { animation: none; }
 }
+
+/* Connect phone dialog */
+.phone form { display: flex; flex-direction: column; gap: 12px; }
+.phone-note { margin: 0; color: var(--muted); line-height: 1.5; }
+.phone-note.faint { color: var(--faint); font-size: 12.5px; }
+.qr { display: block; width: min(260px, 100%); height: auto; margin: 4px auto; border-radius: 12px; }
+.qr-bg { fill: #ffffff; }
+.qr-dots { fill: #111111; }

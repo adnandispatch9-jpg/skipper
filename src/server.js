@@ -19,6 +19,7 @@ const STATIC = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
   '/logic.js': ['logic.js', 'text/javascript; charset=utf-8'],
+  '/qr.js': ['qr.js', 'text/javascript; charset=utf-8'],
   '/app.css': ['app.css', 'text/css; charset=utf-8'],
   '/icon.svg': ['icon.svg', 'image/svg+xml'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'],
@@ -254,6 +255,17 @@ export async function startServer({
         const session = store.get(parts[2]);
         if (!session) return json(res, 404, { error: 'Session not found' });
         return json(res, 200, { now: Date.now(), readOnly, session: { ...session, notes: await notes.list(session.id) } });
+      }
+      if (url.pathname === '/api/pairing') {
+        // The pairing link carries the access token, so only the Mac itself may ask for it.
+        if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress)) return json(res, 403, { error: 'Open this on the Mac running Skipper' });
+        const name = os.hostname().replace(/\.local$/, '');
+        const port = server.address().port;
+        if (!remote) return json(res, 200, { network: false, name, port, command: `skipper --host 0.0.0.0 --port ${port}` });
+        const { lanAddresses, pairingLink } = await import('./pairing.js');
+        const host = lanAddresses()[0];
+        if (!host) return json(res, 200, { network: true, name, port, error: 'This Mac is not on a network' });
+        return json(res, 200, { network: true, name, host, port, link: pairingLink({ host, port, token: accessToken, name }) });
       }
       if (url.pathname === '/api/info') {
         const speech = await speechConfig(skipperDir);

@@ -10,6 +10,7 @@
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/app.css">
+  <script src="/qr.js" defer></script>
   <script src="/logic.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
@@ -26,6 +27,9 @@
         <input id="search" type="search" placeholder="Search sessions" autocomplete="off" spellcheck="false">
         <kbd title="Press ? for all shortcuts">/</kbd>
       </label>
+      <button class="icon-btn" id="phone-btn" type="button" title="Connect phone" aria-haspopup="dialog" aria-controls="phone">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg>
+      </button>
       <div class="menu-wrap">
         <button class="icon-btn" id="notify-btn" type="button" title="Alerts" aria-haspopup="menu" aria-expanded="false" aria-controls="notify-menu">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
@@ -80,6 +84,12 @@
         <div><dt><kbd>⌘</kbd> <kbd>Enter</kbd></dt><dd>Send a message or note</dd></div>
         <div><dt><kbd>?</kbd></dt><dd>Show this list</dd></div>
       </dl>
+    </form>
+  </dialog>
+  <dialog class="shortcuts phone" id="phone" aria-labelledby="phone-title">
+    <form method="dialog">
+      <div class="shortcuts-head"><h2 id="phone-title">Connect your iPhone</h2><button class="icon-btn tiny" value="close" aria-label="Close">×</button></div>
+      <div id="phone-body"></div>
     </form>
   </dialog>
   <div class="toasts" id="toasts" aria-live="polite"></div>

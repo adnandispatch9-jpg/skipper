@@ -135,3 +135,20 @@ test('faviconHref marks attention with a larger colored dot', () => {
   assert.match(decode(faviconHref('waiting')), /fill="#f2b33d"/);
   assert.match(decode(faviconHref('bogus')), /r="5" fill="#3ccf8e"/);
 });
+
+test('QR codes: format bits, finder patterns and a compact SVG path', () => {
+  const context = { TextEncoder };
+  vm.runInNewContext(`${readFileSync(new URL('../public/qr.js', import.meta.url), 'utf8')}\n${logic}\n;globalThis.out = { QR, qrPath };`, context);
+  const { QR, qrPath } = context.out;
+  // Level M, mask 0 is 101010000010010 in the standard; version 7 info is 000111110010010100.
+  assert.equal(QR._internals.bchFormat(0), 0b101010000010010);
+  assert.equal(QR._internals.bchVersion(7), 0b000111110010010100);
+  const link = 'skipper://pair?host=192.168.1.5&port=4320&token=abcdefghijklmnopqrstuvwx&name=Mac';
+  const m = QR.encode(link);
+  assert.equal(m.length, 37, 'version 5 holds 84 bytes at level M');
+  const finder = (r, c) => [0, 1, 2, 3, 4, 5, 6].every((i) => m[r][c + i] && m[r + 6][c + i] && m[r + i][c] && m[r + i][c + 6]);
+  assert.ok(finder(0, 0) && finder(0, m.length - 7) && finder(m.length - 7, 0));
+  assert.equal(m[m.length - 8][8], true, 'dark module');
+  assert.throws(() => QR.encode('x'.repeat(400)), /too long/);
+  assert.equal(qrPath([[true, true, false, true]], 0), 'M0 0h2v1h-2zM3 0h1v1h-1z');
+});

@@ -207,3 +207,23 @@ test('the agent key never appears on the command line', async () => {
   assert.match(readFileSync(file, 'utf8'), /secret-agent-key-123/);
   if (process.platform !== 'win32') assert.equal(statSync(file).mode & 0o777, 0o600);
 });
+
+test('the pairing code is only handed to the Mac itself', async () => {
+  const dir = path.join(os.tmpdir(), `skipper-pair-${process.pid}`);
+  await writeDemo(dir);
+  const local = await startServer({ claudeDir: dir, dataDir: path.join(dir, '.skipper'), port: 0, log: () => {} });
+  const remote = await startServer({ claudeDir: dir, dataDir: path.join(dir, '.skipper'), host: '0.0.0.0', port: 0, token: 'pair-token-123', log: () => {} });
+  try {
+    const off = await (await fetch(`http://127.0.0.1:${local.port}/api/pairing`)).json();
+    assert.equal(off.network, false);
+    assert.match(off.command, /--host 0\.0\.0\.0/);
+    const on = await (await fetch(`http://127.0.0.1:${remote.port}/api/pairing`, { headers: { authorization: 'Bearer pair-token-123' } })).json();
+    assert.equal(on.network, true);
+    if (on.link) assert.equal(new URL(on.link).searchParams.get('token'), 'pair-token-123');
+    assert.equal((await fetch(`http://127.0.0.1:${remote.port}/qr.js`, { headers: { authorization: 'Bearer pair-token-123' } })).status, 200);
+  } finally {
+    await local.close();
+    await remote.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

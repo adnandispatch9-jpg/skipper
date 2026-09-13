@@ -1068,6 +1068,59 @@ async function api(method, url, body) {
   return data;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+async function openPhoneDialog() {
+  const dialog = $('#phone');
+  const body = $('#phone-body');
+  body.replaceChildren(h('p', { class: 'phone-note' }, 'Loading…'));
+  if (!dialog.open) dialog.showModal();
+  let info;
+  try {
+    const res = await fetch('/api/pairing');
+    info = await res.json();
+    if (!res.ok) throw new Error(info.error || 'Could not load the pairing code');
+  } catch (error) {
+    body.replaceChildren(h('p', { class: 'phone-note' }, error.message));
+    return;
+  }
+  if (!info.network) {
+    body.replaceChildren(
+      h('p', { class: 'phone-note' }, 'Skipper is only listening on this Mac. To use the iPhone app on the same Wi-Fi, start it with network access:'),
+      h('div', { class: 'command-box' },
+        h('code', {}, info.command),
+        h('button', { class: 'icon-btn tiny', type: 'button', title: 'Copy command', 'aria-label': 'Copy command', dataset: { action: 'copy', text: info.command } }, icon('copy'))),
+      h('p', { class: 'phone-note faint' }, 'Anyone on the network who has the code can read your sessions, so only do this on a network you trust.'),
+    );
+    return;
+  }
+  if (!info.link) {
+    body.replaceChildren(h('p', { class: 'phone-note' }, info.error || 'No network address found.'));
+    return;
+  }
+  const matrix = QR.encode(info.link);
+  const size = matrix.length + 8;
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+  svg.setAttribute('class', 'qr');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', 'Pairing code for the Skipper iPhone app');
+  const bg = document.createElementNS(SVG_NS, 'rect');
+  bg.setAttribute('width', size);
+  bg.setAttribute('height', size);
+  bg.setAttribute('class', 'qr-bg');
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', qrPath(matrix));
+  path.setAttribute('class', 'qr-dots');
+  svg.append(bg, path);
+  body.replaceChildren(
+    h('p', { class: 'phone-note' }, 'Open Skipper on your iPhone, tap Scan the code in Skipper, and point the camera here. The phone must be on the same Wi-Fi.'),
+    svg,
+    h('p', { class: 'phone-note faint' }, `${info.name} · ${info.host}:${info.port}`),
+    h('button', { class: 'btn', type: 'button', dataset: { action: 'copy', text: info.link, copied: 'Link copied. Paste it in the app under Enter the address manually.' } }, icon('copy'), 'Copy link instead'),
+  );
+}
+
 function toast(message, kind = '') {
   const el = h('div', { class: `toast ${kind}`, role: 'status' }, message);
   $('#toasts').append(el);
@@ -1282,6 +1335,7 @@ function init() {
   const themeParam = new URLSearchParams(location.search).get('theme');
   if (themeParam) store.set('skipper.theme', themeParam);
   applyTheme(themeParam || store.get('skipper.theme'));
+  $('#phone-btn').addEventListener('click', openPhoneDialog);
   $('#theme-btn').addEventListener('click', (event) => {
     event.stopPropagation();
     toggleThemeMenu();

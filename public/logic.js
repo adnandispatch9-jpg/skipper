@@ -148,3 +148,18 @@ function faviconHref(kind) {
     + '</svg>';
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
+
+// SVG path for a QR matrix: one unit square per dark module, merged into horizontal runs.
+function qrPath(matrix, quiet = 4) {
+  let d = '';
+  matrix.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      if (!row[x]) continue;
+      let end = x;
+      while (end + 1 < row.length && row[end + 1]) end++;
+      d += `M${x + quiet} ${y + quiet}h${end - x + 1}v1h-${end - x + 1}z`;
+      x = end;
+    }
+  });
+  return d;
+}
