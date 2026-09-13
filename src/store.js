@@ -390,6 +390,7 @@ export class Store {
         todoDone: plan.filter((t) => t.status === 'completed').length,
         current: current ? current.activeForm || current.content || current.subject : null,
         lastText: s.lastText ? s.lastText.slice(0, 240) : null,
+        turnStartedAt: s.lastPromptAt ?? null,
         agentsRunning: agents.filter((a) => a.status === 'running').length,
         agentsTotal: agents.length,
         loop: live && loopSleeping(s.loop, s.lastPromptAt, this.now()) ? { wakeAt: s.loop.wakeAt, reason: s.loop.reason } : null,

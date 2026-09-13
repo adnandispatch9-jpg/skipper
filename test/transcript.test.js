@@ -72,3 +72,12 @@ test('last tool records what it is working on', () => {
   const s = fold([tool('Edit', { file_path: 'src/checkout/PaymentStep.tsx', old_string: 'a' }, 'e1'), tool('Bash', { command: 'npm test\nnpm run lint' }, 'b1', 2)]);
   assert.deepEqual({ name: s.lastTool.name, target: s.lastTool.target }, { name: 'Bash', target: 'npm test' });
 });
+
+test('slash commands and loop wake-ups start a turn without replacing the typed prompt', () => {
+  const s = fold([
+    { type: 'user', timestamp: at(1), message: { content: 'Build the thing' } },
+    { type: 'user', timestamp: at(30), message: { content: '<command-message>loop</command-message>\n<command-name>/loop</command-name>' } },
+  ]);
+  assert.equal(s.lastPrompt, 'Build the thing');
+  assert.equal(s.lastPromptAt, Date.parse(at(30)));
+});

@@ -23,6 +23,7 @@ function formatCountdown(ms, nowMs) {
 
 function duration(ms) {
   if (!ms || ms < 0) return '—';
+  if (ms < 60000) return `${Math.max(1, Math.round(ms / 1000))}s`;
   const m = Math.round(ms / 60000);
   if (m < 60) return `${m}m`;
   const hrs = Math.floor(m / 60);

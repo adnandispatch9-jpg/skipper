@@ -132,6 +132,8 @@ function applyUser(s, record, at) {
   const content = record.message?.content;
   if (typeof content === 'string') {
     if (content.includes('<task-notification>')) return applyNotification(s, content, at);
+    // Slash commands and loop wake-ups arrive wrapped; they start a turn but are not typed prompts.
+    if (!record.isMeta && content.startsWith('<command-')) s.lastPromptAt = at;
     if (!record.isMeta && !content.startsWith('<')) {
       s.firstPrompt ??= clip(content, 300);
       s.lastPrompt = clip(content, 300);
@@ -143,6 +145,7 @@ function applyUser(s, record, at) {
   for (const block of content) {
     if (block.type === 'text' && typeof block.text === 'string') {
       if (block.text.includes('<task-notification>')) applyNotification(s, block.text, at);
+      else if (!record.isMeta && block.text.startsWith('<command-')) s.lastPromptAt = at;
       else if (!record.isMeta && !block.text.startsWith('<')) {
         s.firstPrompt ??= clip(block.text, 300);
         s.lastPrompt = clip(block.text, 300);

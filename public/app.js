@@ -104,11 +104,13 @@ function dayBucket(at) {
 }
 
 const relTime = (ms) => h('span', { class: 'rel', dataset: { rel: String(ms || '') } }, ago(ms));
+const elapsedTime = (ms) => h('span', { class: 'elapsed', dataset: { since: String(ms || '') } }, duration(now() - ms));
 const untilTime = (ms) => h('span', { class: 'until', dataset: { until: String(ms || '') } }, countdown(ms));
 
 function tick() {
   for (const el of document.querySelectorAll('[data-rel]')) el.textContent = ago(Number(el.dataset.rel));
   for (const el of document.querySelectorAll('[data-until]')) el.textContent = countdown(Number(el.dataset.until));
+  for (const el of document.querySelectorAll('[data-since]')) el.textContent = duration(now() - Number(el.dataset.since));
 }
 
 
@@ -488,7 +490,7 @@ function sessionCard(s) {
   return h('a', { class: `card flight ${s.state}`, href: `#/s/${s.id}` },
     h('div', { class: 'card-top' },
       h('span', { class: `chip ${s.state}` }, h('i', { class: `dot ${s.state}` }), STATE_LABEL[s.state]),
-      sleeping ? h('span', { class: 'countdown' }, untilTime(s.loop.wakeAt)) : h('span', { class: 'meta' }, relTime(s.updatedAt))),
+      sleeping ? h('span', { class: 'countdown' }, untilTime(s.loop.wakeAt)) : s.state === 'working' && s.turnStartedAt ? h('span', { class: 'meta', title: 'Time since this turn started' }, 'running ', elapsedTime(s.turnStartedAt)) : h('span', { class: 'meta' }, relTime(s.updatedAt))),
     h('div', { class: 'card-title' }, s.title),
     h('div', { class: 'card-now' }, plain(sleeping && s.loop.reason ? s.loop.reason : s.current || s.lastText || '')),
     segments(s.todoDone, s.todoTotal, Boolean(s.current), sleeping ? 'sleeping' : 'working'),
@@ -946,6 +948,7 @@ function renderDetail(d) {
           d.model ? h('span', { class: 'meta' }, [d.model, d.permissionMode ? `${d.permissionMode} mode` : null].filter(Boolean).join(' · ')) : null,
           stats.length || d.cost ? h('span', { class: 'meta' }, stats.join(' · '),
             d.cost ? [' · ', h('span', { class: 'plus' }, `+${d.cost.linesAdded}`), ' ', h('span', { class: 'minus' }, `−${d.cost.linesRemoved}`)] : null) : null,
+          d.state === 'working' && d.turnStartedAt ? h('span', { class: 'meta' }, 'turn running ', elapsedTime(d.turnStartedAt)) : null,
           d.pid ? h('span', { class: 'meta mono faint' }, `pid ${d.pid}`) : null)),
       h('div', { class: 'head-actions' },
         pr && safeHref(pr.url) ? h('a', { class: 'btn', href: safeHref(pr.url), target: '_blank', rel: 'noopener noreferrer' }, icon('pr'), pr.number ? `PR #${pr.number}` : 'Pull request') : null,
