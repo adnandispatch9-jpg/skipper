@@ -128,23 +128,14 @@ skipper --host 0.0.0.0
 
 Skipper prints a link with a one-time access token for every network address. Open it on your phone once and a secure cookie keeps you signed in. Without the token, nothing is served.
 
-### Keep it running on macOS
+### Keep it running in the background
 
-Save this as `~/Library/LaunchAgents/dev.skipper.plist` (adjust the paths), then run `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.skipper.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>dev.skipper</string>
-  <key>ProgramArguments</key>
-  <array><string>/opt/homebrew/bin/node</string><string>/path/to/skipper/bin/skipper.js</string></array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-</dict>
-</plist>
+```bash
+npm install -g github:bilol-makhmudov/skipper
+skipper service install
 ```
+
+Skipper starts at login and restarts if it stops: a launchd agent on macOS, a systemd user service on Linux. Check it with `skipper service status` and remove it with `skipper service uninstall`.
 
 ## How it works
 

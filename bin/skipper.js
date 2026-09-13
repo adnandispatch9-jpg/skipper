@@ -6,6 +6,7 @@ import { readFileSync, rmSync, existsSync } from 'node:fs';
 import { startServer, isLoopback } from '../src/server.js';
 import { writeDemo } from '../src/demo.js';
 import { recordHook, installHooks, uninstallHooks, hooksStatus } from '../src/hooks.js';
+import { installService, uninstallService, serviceStatus } from '../src/service.js';
 import { fileURLToPath } from 'node:url';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -16,6 +17,9 @@ Usage: skipper [options]
        skipper hooks install    Get sound and desktop alerts for permission prompts
        skipper hooks uninstall  Remove Skipper's Claude Code hooks
        skipper hooks status
+       skipper service install  Keep Skipper running in the background (macOS, Linux)
+       skipper service uninstall
+       skipper service status
 
 Options:
   -p, --port <n>         Port to listen on (default 4317, or $PORT)
@@ -85,6 +89,46 @@ if (argv[0] === 'hook') {
   process.exit(0);
 }
 
+// The node on PATH survives upgrades better than a versioned process.execPath.
+function stableNode() {
+  const name = process.platform === 'win32' ? 'node.exe' : 'node';
+  return (process.env.PATH || '').split(path.delimiter).map((dir) => path.join(dir, name)).find((file) => existsSync(file)) || process.execPath;
+}
+
+if (argv[0] === 'service') {
+  const action = argv[1] || 'status';
+  const scriptPath = fileURLToPath(import.meta.url);
+  try {
+    if (action === 'install') {
+      if (scriptPath.includes(`${path.sep}_npx${path.sep}`)) {
+        fail('Install Skipper first so the service has a stable path:\n  npm install -g github:bilol-makhmudov/skipper\n  skipper service install');
+      }
+      const portIndex = argv.indexOf('--port');
+      const port = portIndex > -1 ? Number(argv[portIndex + 1]) : 4317;
+      if (!Number.isInteger(port) || port < 1 || port > 65535) fail('Invalid --port');
+      const result = await installService({ nodePath: stableNode(), scriptPath, port });
+      // The first scan of a large history can take a few seconds; wait until it answers.
+      let ready = false;
+      for (let i = 0; i < 40 && !ready; i++) {
+        await new Promise((r) => setTimeout(r, 250));
+        ready = await fetch(`${result.url}/api/sessions`).then((r) => r.ok).catch(() => false);
+      }
+      console.log(`${ready ? 'Skipper is running in the background and starts at login.' : 'Skipper service installed, but it has not answered yet. Check the logs.'}\n  Open  ${result.url}\n  Logs  ${result.logs}\n  File  ${result.file}`);
+    } else if (action === 'uninstall') {
+      const { removed } = await uninstallService();
+      console.log(removed ? 'Skipper background service removed.' : 'No Skipper background service was installed.');
+    } else if (action === 'status') {
+      const status = serviceStatus();
+      console.log(!status.installed ? 'Not installed. Run: skipper service install' : status.running ? 'Installed and running.' : 'Installed but not running.');
+    } else {
+      fail(`Unknown service command: ${action}`);
+    }
+  } catch (error) {
+    fail(error.message);
+  }
+  process.exit(0);
+}
+
 if (argv[0] === 'hooks') {
   const settingsFile = path.join(defaultClaudeDir(), 'settings.json');
   const action = argv[1] || 'status';
@@ -95,8 +139,7 @@ if (argv[0] === 'hooks') {
         console.warn('Note: you are running Skipper through npx, whose cache can be cleared.\nFor lasting hooks, install it: npm install -g github:bilol-makhmudov/skipper\n');
       }
       // Prefer the node on PATH: process.execPath can be a versioned path that an upgrade removes.
-      const onPath = (process.env.PATH || '').split(path.delimiter).map((dir) => path.join(dir, process.platform === 'win32' ? 'node.exe' : 'node')).find((file) => existsSync(file));
-      await installHooks({ settingsFile, nodePath: onPath || process.execPath, scriptPath });
+      await installHooks({ settingsFile, nodePath: stableNode(), scriptPath });
       console.log(`Installed Notification and Stop hooks in ${settingsFile}\nA backup was saved as settings.json.skipper-backup. New Claude Code sessions pick this up; restart open ones.`);
     } else if (action === 'uninstall') {
       const { removed } = await uninstallHooks({ settingsFile });
