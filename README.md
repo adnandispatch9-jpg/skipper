@@ -196,7 +196,7 @@ No. Skipper is an independent open-source project for people who use Claude Code
 
 ## Contributing
 
-Issues and pull requests are welcome. Run `npm test` before you open a PR (and `npm run screenshots` if you changed visuals), and see [CONTRIBUTING.md](CONTRIBUTING.md). If Skipper saves you a trip through your terminals, a ⭐ helps other Claude Code users find it.
+Issues and pull requests are welcome, and [good first issues](https://github.com/bilol-makhmudov/skipper/labels/good%20first%20issue) are a friendly place to start. Run `npm test` before you open a PR (and `npm run screenshots` if you changed visuals), and see [CONTRIBUTING.md](CONTRIBUTING.md). If Skipper saves you a trip through your terminals, a ⭐ helps other Claude Code users find it.
 
 ## License
 
