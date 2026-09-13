@@ -588,7 +588,7 @@ function renderUsage() {
   const head = h('div', { class: 'page-head usage-head' },
     h('div', {},
       h('h1', {}, 'Usage'),
-      h('p', { class: 'lede' }, 'Tokens are counted from every response, including subagents. Dollar cost appears only where Claude Code recorded it.')),
+      h('p', { class: 'lede' }, 'Tokens are counted from every response, including subagents, on the day they happened. Dollar cost appears only where Claude Code recorded it, as a total for the whole session.')),
     h('div', { class: 'segmented usage-range', role: 'tablist', 'aria-label': 'Time range' },
       USAGE_RANGES.map(([days, label]) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(state.usageDays === days), dataset: { usageDays: String(days) } }, label))));
   if (!u) return h('div', { class: 'usage' }, head, h('p', { class: 'muted' }, 'Loading usage…'));
@@ -622,7 +622,7 @@ function renderUsage() {
       tile('Output tokens', formatTokens(t.output), change == null ? null : `${change >= 0 ? '+' : ''}${change}% vs previous ${u.days === 1 ? 'day' : `${u.days} days`}`),
       tile('Input tokens', formatTokens(t.input), t.input ? `${Math.round((t.cacheRead / t.input) * 100)}% served from cache` : null),
       tile('Subagents', t.output ? `${Math.round((t.subagentOutput / t.output) * 100)}%` : '0%', 'of output tokens'),
-      tile('Recorded cost', t.costSessions ? `$${t.recordedCost.toFixed(2)}` : '—', t.costSessions ? `from ${t.costSessions} session${t.costSessions === 1 ? '' : 's'}` : 'none recorded in this range')),
+      tile('Recorded cost', t.costSessions ? `$${t.recordedCost.toFixed(2)}` : '—', t.costSessions ? `whole-session totals of ${t.costSessions} session${t.costSessions === 1 ? '' : 's'} active in this range` : 'none recorded in this range')),
     h('section', { class: 'panel chart-panel' },
       h('div', { class: 'panel-head' }, h('h2', {}, 'Output tokens per day'), h('span', { class: 'meta', id: 'chart-readout', 'aria-live': 'polite' }, 'Hover a bar for details')),
       h('div', { class: 'chart' },

@@ -33,7 +33,7 @@ Running several Claude Code agents at once is powerful and hard to follow. One t
 
 <img src="docs/screenshots/usage-dark.png" alt="Usage page: output and input tokens, subagent share, recorded cost, output tokens per day, and breakdowns by project and model" width="100%">
 
-Exact token counts from every response, including subagents, per day, project and model. Skipper counts each response once and never estimates prices: dollar cost appears only where Claude Code recorded it.
+Exact token counts from every response, including subagents, per day, project and model. Skipper counts each response once and never estimates prices: dollar cost appears only where Claude Code recorded it, as a whole-session total for sessions active in the chosen range.
 
 ## Steer, not just watch
 
