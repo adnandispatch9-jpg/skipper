@@ -39,6 +39,7 @@ export function localVoicePaths(dataDir, env = process.env) {
   return {
     whisper: env.SKIPPER_WHISPER_BIN || whisper,
     model: env.SKIPPER_WHISPER_MODEL || path.join(dataDir, 'models', 'ggml-large-v3-turbo-q5_0.bin'),
+    detectModel: [path.join(dataDir, 'models', 'ggml-base.bin'), path.join(os.homedir(), '.cache', 'whisper.cpp', 'ggml-base.bin')].find((p) => existsSync(p)) || null,
     edgeTts: env.SKIPPER_EDGE_TTS || path.join(dataDir, 'voice-venv', 'bin', 'edge-tts'),
     ffmpeg: ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg'].find((p) => existsSync(p)) || 'ffmpeg',
   };
@@ -63,6 +64,19 @@ const run = (file, args, { timeout = 60_000 } = {}) =>
     execFile(file, args, { timeout, maxBuffer: 8 * 1024 * 1024 }, (error, stdout, stderr) => (error ? reject(Object.assign(error, { stderr })) : resolve({ stdout, stderr })));
   });
 
+/** Whisper's language guess ("en", "tr", ...) from its log; the detection line is hidden by -np, so it is not passed. */
+export function parseDetectedLanguage(log) {
+  return /auto-detected language: (\w+)/.exec(log || '')?.[1] ?? null;
+}
+
+async function detectSpokenLanguage(config, input) {
+  // A small model is enough to tell English apart and takes well under a second.
+  const model = config.detectModel && existsSync(config.detectModel) ? config.detectModel : config.model;
+  const result = await run(config.whisper, ['-m', model, '-l', 'auto', '-dl', '-f', input], { timeout: 30_000 }).catch((e) => ({ stdout: '', stderr: e.stderr || '' }));
+  // Uzbek is often heard as Turkish or Kazakh; anything but English is treated as Uzbek.
+  return parseDetectedLanguage(`${result.stdout}\n${result.stderr}`) === 'en' ? 'en-US' : 'uz-UZ';
+}
+
 async function transcribeLocal(config, audio, languages) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'skipper-voice-'));
   try {
@@ -71,12 +85,7 @@ async function transcribeLocal(config, audio, languages) {
     const whisper = (language, extra = []) =>
       run(config.whisper, ['-m', config.model, '-l', language, '-nt', '-np', '-f', input, ...extra], { timeout: 90_000 });
     let language = languages.length === 1 ? languages[0] : null;
-    if (!language) {
-      // Ask Whisper which language it hears; anything other than English is treated as Uzbek.
-      const detect = await whisper('auto', ['-dl']).catch((e) => ({ stdout: '', stderr: e.stderr || '' }));
-      const found = /auto-detected language: (\w+)/.exec(detect.stderr || '')?.[1];
-      language = found === 'en' ? 'en-US' : 'uz-UZ';
-    }
+    if (!language) language = await detectSpokenLanguage(config, input);
     const { stdout } = language === 'uz-UZ' ? await whisper('uz', ['--prompt', WHISPER_PROMPT]) : await whisper('en');
     return { text: stdout.replace(/\s+/g, ' ').trim(), language, confidence: 0.6 };
   } catch (error) {

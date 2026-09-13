@@ -64,3 +64,10 @@ test('the key comes from the environment or a private config file', async () => 
   if (process.platform !== 'win32') assert.equal(statSync(path.join(dir, 'config.json')).mode & 0o777, 0o600);
   assert.equal((await speechConfig(dir, { AZURE_SPEECH_KEY: 'x', AZURE_SPEECH_REGION: 'y' })).key, 'x');
 });
+
+test('Whisper language detection is read from its log', async () => {
+  const { parseDetectedLanguage } = await import('../src/speech.js');
+  assert.equal(parseDetectedLanguage('whisper_full_with_state: auto-detected language: en (p = 0.97)'), 'en');
+  assert.equal(parseDetectedLanguage('whisper_full_with_state: auto-detected language: tr (p = 0.56)'), 'tr');
+  assert.equal(parseDetectedLanguage('nothing here'), null);
+});
