@@ -58,6 +58,8 @@ const ICONS = {
   sun: 'M12 3v2M12 19v2M5 5l1.4 1.4M17.6 17.6 19 19M3 12h2M19 12h2M5 19l1.4-1.4M17.6 6.4 19 5M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',
   moon: 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z',
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  shield: 'M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6ZM12 8v4M12 15.5h.01',
+  reply: 'M9 14 4 9l5-5M4 9h10a6 6 0 0 1 6 6v5',
   edit: 'M4 20h4L19 9l-4-4L4 16ZM13.5 6.5l4 4',
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
   send: 'M4 12 20 4l-6 16-3-7Z',
@@ -78,7 +80,7 @@ const now = () => Date.now() + state.serverOffset;
 function ago(ms) {
   if (!ms) return '';
   const s = Math.max(0, Math.round((now() - ms) / 1000));
-  if (s < 45) return 'just now';
+  if (s < 60) return 'just now';
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < DAY / 1000) return `${Math.floor(s / 3600)}h ago`;
   if (s < 7 * DAY / 1000) return `${Math.floor(s / 86400)}d ago`;
@@ -328,12 +330,13 @@ function renderPulse() {
     if (counts[s.state] != null) counts[s.state]++;
     agents += s.agentsRunning;
   }
-  const pill = (dot, n, label, optional) => h('span', { class: `pulse${optional ? ' optional' : ''}` }, dot && h('i', { class: `dot ${dot}` }), h('b', {}, n), label);
+  const needsCount = counts.waiting + counts.permission;
+  const kind = counts.permission ? 'permission' : counts.waiting ? 'waiting' : 'clear';
   $('#pulse').replaceChildren(
-    pill(counts.permission ? 'permission' : 'waiting', counts.waiting + counts.permission, 'need you'),
-    pill('working', counts.working, 'working'),
-    pill('sleeping', counts.sleeping, 'sleeping', true),
-    pill(null, agents, agents === 1 ? 'subagent running' : 'subagents running', true),
+    h('a', { class: `attention-pill ${kind}`, href: '#/' },
+      h('i', { class: `dot ${kind === 'clear' ? 'working' : kind}` }),
+      needsCount ? `${needsCount} need${needsCount === 1 ? 's' : ''} you` : 'All clear'),
+    h('span', { class: 'pulse-summary' }, `${counts.working} working · ${counts.sleeping} sleeping · ${agents} subagent${agents === 1 ? '' : 's'}`),
   );
   const needs = counts.waiting + counts.permission;
   document.title = counts.permission ? `(${needs}) Permission needed · Skipper` : needs ? `(${needs}) Skipper` : 'Skipper';
@@ -388,22 +391,62 @@ function progress(done, total) {
   );
 }
 
+function segments(done, total, current, color = 'working') {
+  if (!total) return null;
+  const count = Math.min(total, 12);
+  const scale = total / count;
+  return h('div', { class: `segments ${color}`, role: 'img', 'aria-label': `${done} of ${total} done` },
+    Array.from({ length: count }, (_, i) => {
+      const filled = (i + 1) * scale <= done;
+      const active = !filled && current && i * scale < done + 1;
+      return h('i', { class: filled ? 'on' : active ? 'half' : '' });
+    }));
+}
+
+function metaItem(iconName, text, cls = '') {
+  return text ? h('span', { class: `meta ${cls}` }, iconName ? icon(iconName) : null, text) : null;
+}
+
+function queueRow(s) {
+  const permission = s.state === 'permission';
+  const ask = s.attention?.message || '';
+  const command = ask.match(/:\s*(.+)$/)?.[1];
+  return h('a', { class: `queue-row ${s.state}`, href: `#/s/${s.id}` },
+    h('span', { class: 'queue-icon' }, icon(permission ? 'shield' : 'reply')),
+    h('span', { class: 'queue-body' },
+      h('span', { class: 'queue-title' },
+        h('b', {}, s.title),
+        h('span', { class: `chip ${s.state}` }, permission ? (s.attention?.kind === 'question' ? 'Question' : 'Permission') : 'Your turn'),
+        h('span', { class: 'queue-when' }, relTime(permission ? s.attention?.at : s.updatedAt))),
+      permission
+        ? h('span', { class: 'queue-ask' }, command ? ['Wants to run ', h('code', {}, command)] : ask || 'Waiting for your approval in the terminal.')
+        : h('span', { class: 'queue-quote' }, plain(s.lastText || 'Claude finished and is waiting for you.')),
+      h('span', { class: 'queue-meta' },
+        metaItem('folder', s.project),
+        s.branch && s.branch !== 'HEAD' ? metaItem('branch', s.branch) : null,
+        s.todoTotal ? h('span', { class: 'meta' }, `Plan ${s.todoDone}/${s.todoTotal}`) : null)),
+    h('span', { class: 'queue-action' },
+      permission ? h('span', { class: 'hint' }, 'Approve in terminal') : null,
+      h('span', { class: 'btn small primary' }, permission ? 'Open session' : 'Reply')),
+  );
+}
+
 function sessionCard(s) {
-  return h('a', { class: `card ${s.state}`, href: `#/s/${s.id}` },
+  const sleeping = s.state === 'sleeping' && s.loop;
+  return h('a', { class: `card flight ${s.state}`, href: `#/s/${s.id}` },
     h('div', { class: 'card-top' },
       h('span', { class: `chip ${s.state}` }, h('i', { class: `dot ${s.state}` }), STATE_LABEL[s.state]),
-      h('span', { class: 'meta' }, s.state === 'sleeping' && s.loop ? ['wakes in ', untilTime(s.loop.wakeAt)] : relTime(s.updatedAt)),
-    ),
+      sleeping ? h('span', { class: 'countdown' }, untilTime(s.loop.wakeAt)) : h('span', { class: 'meta' }, relTime(s.updatedAt))),
     h('div', { class: 'card-title' }, s.title),
-    s.attention ? h('div', { class: 'card-now attention-text' }, s.attention.message || 'Waiting for your approval in the terminal.')
-      : s.current || s.lastText ? h('div', { class: 'card-now' }, plain(s.state === 'sleeping' && s.loop?.reason ? s.loop.reason : s.current || s.lastText)) : null,
-    progress(s.todoDone, s.todoTotal),
+    h('div', { class: 'card-now' }, plain(sleeping && s.loop.reason ? s.loop.reason : s.current || s.lastText || '')),
+    segments(s.todoDone, s.todoTotal, Boolean(s.current), sleeping ? 'sleeping' : 'working'),
     h('div', { class: 'card-foot' },
-      h('span', { class: 'meta' }, icon('folder'), s.project),
-      s.branch && s.branch !== 'HEAD' ? h('span', { class: 'meta' }, icon('branch'), s.branch) : null,
-      s.agentsRunning ? h('span', { class: 'meta' }, icon('bot'), `${s.agentsRunning} running`) : null,
-      s.prCount ? h('span', { class: 'meta' }, icon('pr'), s.prCount) : null,
-    ),
+      metaItem('folder', s.project),
+      h('span', { class: 'card-foot-right' },
+        s.agentsRunning ? metaItem('bot', `${s.agentsRunning} running`, 'accent') : null,
+        s.team ? metaItem('team', 'team') : null,
+        s.prCount ? metaItem('pr', String(s.prCount)) : null,
+        sleeping && s.todoTotal ? h('span', { class: 'meta' }, `${s.todoDone}/${s.todoTotal}`) : null)),
   );
 }
 
@@ -416,38 +459,42 @@ function renderOverview() {
     );
   }
   const live = state.sessions.filter((s) => s.live && matches(s));
-  const order = { permission: 0, waiting: 1, working: 2, sleeping: 3 };
-  live.sort((a, b) => order[a.state] - order[b.state] || b.updatedAt - a.updatedAt);
-  const recent = state.sessions.filter((s) => !s.live && matches(s)).slice(0, 8);
+  const queue = live.filter((s) => s.state === 'permission' || s.state === 'waiting')
+    .sort((a, b) => (a.state === 'permission' ? 0 : 1) - (b.state === 'permission' ? 0 : 1) || b.updatedAt - a.updatedAt);
+  const flight = live.filter((s) => s.state === 'working' || s.state === 'sleeping')
+    .sort((a, b) => (a.state === 'working' ? 0 : 1) - (b.state === 'working' ? 0 : 1) || b.updatedAt - a.updatedAt);
+  const recent = state.sessions.filter((s) => !s.live && matches(s)).slice(0, 6);
+  const nextWake = live.map((s) => s.loop?.wakeAt).filter((t) => t > now()).sort()[0];
+  const needs = queue.length;
 
-  const stat = (cls, n, label) => h('div', { class: `stat ${cls}` }, h('div', { class: 'num' }, n), h('div', { class: 'label' }, cls && h('i', { class: `dot ${cls}` }), label));
-
-  return h('div', {},
+  return h('div', { class: 'overview' },
     h('div', { class: 'page-head' },
       h('div', {},
-        h('h1', {}, counts.permission ? `${counts.permission} session${counts.permission > 1 ? 's' : ''} need${counts.permission > 1 ? '' : 's'} your permission` : counts.waiting ? `${counts.waiting} session${counts.waiting > 1 ? 's' : ''} waiting on you` : live.length ? 'Everything is moving' : 'All quiet'),
-        h('p', { class: 'lede' }, `${live.length} live session${live.length === 1 ? '' : 's'} · ${state.sessions.length} in history`),
+        h('h1', {}, needs ? `${needs} session${needs > 1 ? 's' : ''} need${needs > 1 ? '' : 's'} you` : live.length ? 'Everything is moving' : 'All quiet'),
+        h('p', { class: 'status-line' },
+          h('span', {}, `${live.length} live`),
+          counts.agents ? h('span', {}, `${counts.agents} subagent${counts.agents > 1 ? 's' : ''} running`) : null,
+          nextWake ? h('span', {}, 'next loop wakes in ', h('b', { class: 'sleeping-text' }, untilTime(nextWake))) : null,
+          h('span', {}, `${state.sessions.length} in history`)),
       ),
       h('a', { class: 'meta', href: '#/sessions' }, icon('list'), 'All sessions'),
     ),
-    h('div', { class: 'stats' },
-      stat(counts.permission ? 'permission' : 'waiting', counts.waiting + counts.permission, 'Need you'),
-      stat('working', counts.working, 'Working'),
-      stat('sleeping', counts.sleeping, 'Sleeping loops'),
-      stat('', counts.agents, 'Subagents running'),
-    ),
+    queue.length ? h('section', { class: 'section' },
+      h('h2', {}, 'Needs you'),
+      h('div', { class: 'queue' }, queue.map(queueRow)),
+    ) : null,
     h('section', { class: 'section' },
-      h('h2', {}, 'Live now'),
-      live.length ? h('div', { class: 'cards' }, live.map(sessionCard)) : h('p', { class: 'muted' }, 'No Claude Code session is running right now.'),
+      h('h2', {}, 'In flight'),
+      flight.length ? h('div', { class: 'cards' }, flight.map(sessionCard)) : h('p', { class: 'muted' }, live.length ? 'Nothing is running right now.' : 'No Claude Code session is running right now.'),
     ),
     recent.length ? h('section', { class: 'section' },
-      h('h2', {}, 'Recently finished'),
+      h('div', { class: 'section-head' }, h('h2', {}, 'Recently finished'), h('a', { class: 'meta', href: '#/sessions' }, 'View history')),
       h('div', { class: 'table' }, recent.map((s) =>
         h('a', { class: 'row', href: `#/s/${s.id}` },
-          h('i', { class: 'dot ended' }),
           h('span', { class: 'title' }, s.title),
           h('span', { class: 'dim hide-sm' }, s.project),
-          h('span', { class: 'num hide-sm' }, s.costUsd != null ? `$${s.costUsd.toFixed(2)}` : ''),
+          h('span', { class: 'dim hide-sm' }, s.prCount ? [icon('pr'), ` ${s.prCount} PR`] : '—'),
+          h('span', { class: 'num hide-sm mono' }, s.costUsd != null ? `$${s.costUsd.toFixed(2)}` : ''),
           h('span', { class: 'num' }, relTime(s.updatedAt)),
         ),
       )),
