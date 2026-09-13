@@ -44,7 +44,7 @@ class VoiceTurn {
 }
 
 class VoiceState {
-  const VoiceState({this.phase = VoicePhase.idle, this.turns = const [], this.heard = '', this.speakAloud = true, this.micError, this.soundLevel = 0, this.language = 'auto', this.cloud = false});
+  const VoiceState({this.phase = VoicePhase.idle, this.turns = const [], this.heard = '', this.speakAloud = true, this.micError, this.soundLevel = 0, this.language = 'auto', this.cloud = false, this.voices = const {}, this.voiceOptions = const {}});
   final VoicePhase phase;
   final List<VoiceTurn> turns;
   final String heard;
@@ -58,7 +58,13 @@ class VoiceState {
   /// True when the Mac has neural voices set up (needed for Uzbek).
   final bool cloud;
 
-  VoiceState copyWith({VoicePhase? phase, List<VoiceTurn>? turns, String? heard, bool? speakAloud, String? micError, bool clearMicError = false, double? soundLevel, String? language, bool? cloud}) => VoiceState(
+  /// Chosen voice per language (language -> voice id).
+  final Map<String, String> voices;
+
+  /// Voices the Mac offers, per language.
+  final Map<String, List<VoiceOption>> voiceOptions;
+
+  VoiceState copyWith({VoicePhase? phase, List<VoiceTurn>? turns, String? heard, bool? speakAloud, String? micError, bool clearMicError = false, double? soundLevel, String? language, bool? cloud, Map<String, String>? voices, Map<String, List<VoiceOption>>? voiceOptions}) => VoiceState(
         phase: phase ?? this.phase,
         turns: turns ?? this.turns,
         heard: heard ?? this.heard,
@@ -67,6 +73,8 @@ class VoiceState {
         soundLevel: soundLevel ?? this.soundLevel,
         language: language ?? this.language,
         cloud: cloud ?? this.cloud,
+        voices: voices ?? this.voices,
+        voiceOptions: voiceOptions ?? this.voiceOptions,
       );
 }
 
@@ -105,6 +113,7 @@ class VoiceController extends Notifier<VoiceState> {
 
   static const _speakKey = 'skipper.voice.speak';
   static const _languageKey = 'skipper.voice.language';
+  static const _voiceKey = 'skipper.voice.speaker';
 
   @override
   VoiceState build() {
@@ -117,7 +126,14 @@ class VoiceController extends Notifier<VoiceState> {
       _player.dispose();
     });
     _initTts();
-    SharedPreferences.getInstance().then((prefs) => state = state.copyWith(speakAloud: prefs.getBool(_speakKey) ?? true, language: prefs.getString(_languageKey) ?? 'auto'));
+    SharedPreferences.getInstance().then((prefs) => state = state.copyWith(
+          speakAloud: prefs.getBool(_speakKey) ?? true,
+          language: prefs.getString(_languageKey) ?? 'auto',
+          voices: {
+            if (prefs.getString('$_voiceKey.uz-UZ') case final uz?) 'uz-UZ': uz,
+            if (prefs.getString('$_voiceKey.en-US') case final en?) 'en-US': en,
+          },
+        ));
     _refreshCloud();
     return const VoiceState();
   }
@@ -140,8 +156,24 @@ class VoiceController extends Notifier<VoiceState> {
     if (client == null) return;
     try {
       final info = await client.info();
-      state = state.copyWith(cloud: info.cloudVoice);
+      state = state.copyWith(cloud: info.cloudVoice, voiceOptions: info.voices);
     } catch (_) {}
+  }
+
+  Future<void> setVoice(String language, String voiceId) async {
+    state = state.copyWith(voices: {...state.voices, language: voiceId});
+    (await SharedPreferences.getInstance()).setString('$_voiceKey.$language', voiceId);
+  }
+
+  /// Plays a short sample with the chosen voice.
+  Future<void> previewVoice(String language, String voiceId) async {
+    final client = ref.read(clientProvider);
+    if (client == null) return;
+    await stopSpeaking();
+    final sample = language == 'uz-UZ' ? 'Salom! Men sizning sessiyalaringiz haqida gapirib beraman.' : 'Hi! I will tell you what your sessions are doing.';
+    final audio = client.speak(sample, voices: {language: voiceId}).then<List<int>?>((b) => b).catchError((_) => null);
+    _queue.add((text: sample, audio: audio));
+    if (!_speaking) _drain();
   }
 
   Future<void> setLanguage(String language) async {
@@ -169,7 +201,7 @@ class VoiceController extends Notifier<VoiceState> {
     await _answer?.cancel();
     await _refreshCloud();
     if (!_useCloudInput && state.language == 'uz-UZ') {
-      state = state.copyWith(micError: 'Uzbek voice is not set up on your Mac yet. Run skipper voice setup there.');
+      state = state.copyWith(micError: 'Uzbek voice is not set up on your Mac yet. Open Settings in this app to see how.');
       return;
     }
     HapticFeedback.mediumImpact();
@@ -324,7 +356,7 @@ class VoiceController extends Notifier<VoiceState> {
     if (!state.speakAloud) return;
     final client = ref.read(clientProvider);
     // Fetch each sentence's audio right away so playback does not wait between sentences.
-    final audio = state.cloud && client != null ? client.speak(sentence).then<List<int>?>((b) => b).catchError((_) => null) : null;
+    final audio = state.cloud && client != null ? client.speak(sentence, voices: state.voices).then<List<int>?>((b) => b).catchError((_) => null) : null;
     _queue.add((text: sentence, audio: audio));
     if (!_speaking) _drain();
   }

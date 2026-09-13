@@ -25,6 +25,21 @@ class SkipperClient {
   final PairingInfo pairing;
   final http.Client _http;
 
+  /// A phone keeps idle connections open; after the Mac restarts, the first request on a dead one
+  /// fails immediately. Retrying once on a fresh connection hides that.
+  Future<T> _retry<T>(Future<T> Function() request) async {
+    try {
+      return await request();
+    } on SkipperException {
+      rethrow;
+    } on TimeoutException {
+      rethrow;
+    } catch (_) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      return request();
+    }
+  }
+
   Map<String, String> get _headers => {'Authorization': 'Bearer ${pairing.token}', 'Accept': 'application/json'};
 
   Uri _uri(String path, [Map<String, String>? query]) => pairing.baseUri.replace(path: path, queryParameters: query);
@@ -32,7 +47,7 @@ class SkipperClient {
   Future<Map<String, dynamic>> _getJson(String path, [Map<String, String>? query]) async {
     final http.Response res;
     try {
-      res = await _http.get(_uri(path, query), headers: _headers).timeout(const Duration(seconds: 8));
+      res = await _retry(() => _http.get(_uri(path, query), headers: _headers).timeout(const Duration(seconds: 8)));
     } on TimeoutException {
       throw const SkipperException('Your Mac did not answer. Is it awake and on the same Wi-Fi?');
     } catch (_) {
@@ -58,7 +73,8 @@ class SkipperClient {
 
   Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
     try {
-      final res = await _http.post(_uri(path), headers: await _writeHeaders(), body: jsonEncode(body)).timeout(const Duration(seconds: 30));
+      final headers = await _writeHeaders();
+      final res = await _retry(() => _http.post(_uri(path), headers: headers, body: jsonEncode(body)).timeout(const Duration(seconds: 30)));
       return _decode(res);
     } on SkipperException {
       rethrow;
@@ -98,9 +114,9 @@ class SkipperClient {
   Future<({String text, String language})> transcribe(List<int> wav, {String? language}) async {
     final http.Response res;
     try {
-      res = await _http
+      res = await _retry(() => _http
           .post(_uri('/api/voice/transcribe', {'language': ?language}), headers: {..._headers, 'Content-Type': 'audio/wav', 'X-Skipper': '1'}, body: wav)
-          .timeout(const Duration(seconds: 40));
+          .timeout(const Duration(seconds: 90)));
     } catch (_) {
       throw const SkipperException('Could not send the recording to your Mac.');
     }
@@ -109,12 +125,13 @@ class SkipperClient {
   }
 
   /// A sentence read by the Mac's neural voice, as MP3 bytes.
-  Future<List<int>> speak(String text, {String? language}) async {
+  Future<List<int>> speak(String text, {Map<String, String>? voices}) async {
     final http.Response res;
+    final headers = await _writeHeaders();
     try {
-      res = await _http
-          .post(_uri('/api/voice/speak'), headers: await _writeHeaders(), body: jsonEncode({'text': text, 'language': ?language}))
-          .timeout(const Duration(seconds: 30));
+      res = await _retry(() => _http
+          .post(_uri('/api/voice/speak'), headers: headers, body: jsonEncode({'text': text, 'voices': ?voices}))
+          .timeout(const Duration(seconds: 30)));
     } catch (_) {
       throw const SkipperException('Could not reach your Mac for the voice.');
     }
@@ -137,11 +154,20 @@ class SkipperClient {
     final request = http.Request('POST', _uri('/api/agent/ask'))
       ..headers.addAll({...await _writeHeaders(), 'Accept': 'text/event-stream'})
       ..body = jsonEncode({'text': text, 'conversationId': ?conversationId});
-    final http.StreamedResponse res;
+    http.StreamedResponse res;
     try {
       res = await _http.send(request);
     } catch (_) {
-      throw const SkipperException('Could not reach your Mac.');
+      // Retry once on a fresh connection (a request object can only be sent once).
+      try {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        final again = http.Request('POST', request.url)
+          ..headers.addAll(request.headers)
+          ..body = request.body;
+        res = await _http.send(again);
+      } catch (_) {
+        throw const SkipperException('Could not reach your Mac. Check that it is awake and on the same Wi-Fi.');
+      }
     }
     if (res.statusCode != 200) {
       final body = await res.stream.bytesToString();

@@ -201,15 +201,31 @@ class ActivityItem {
   }
 }
 
+class VoiceOption {
+  const VoiceOption({required this.id, required this.name, required this.gender});
+  final String id, name, gender;
+}
+
 class ServerInfo {
-  const ServerInfo({required this.name, required this.readOnly, required this.agent, this.cloudVoice = false});
+  const ServerInfo({required this.name, required this.readOnly, required this.agent, this.cloudVoice = false, this.voices = const {}});
   final String name;
   final bool readOnly, agent, cloudVoice;
+
+  /// language -> voices the Mac can speak with.
+  final Map<String, List<VoiceOption>> voices;
 
   factory ServerInfo.fromJson(Map<String, dynamic> json) => ServerInfo(
         name: _as<String>(json['name']) ?? 'Mac',
         readOnly: json['readOnly'] == true,
         agent: json['agent'] == true,
         cloudVoice: json['cloudVoice'] == true,
+        voices: {
+          for (final entry in (_as<Map>(json['voices']) ?? const {}).entries)
+            if (entry.key is String && entry.value is List)
+              entry.key as String: [
+                for (final v in entry.value as List)
+                  if (v is Map && v['id'] is String) VoiceOption(id: v['id'] as String, name: _as<String>(v['name']) ?? v['id'] as String, gender: _as<String>(v['gender']) ?? ''),
+              ],
+        },
       );
 }

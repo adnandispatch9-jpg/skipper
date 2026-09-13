@@ -10,7 +10,7 @@ import { eventsFile, hooksStatus } from './hooks.js';
 import { readConversation } from './conversation.js';
 import { Agent } from './agent.js';
 import { compactSession } from './mcp.js';
-import { speechConfig, transcribe, synthesize, SpeechError, LANGUAGES } from './speech.js';
+import { speechConfig, transcribe, synthesize, SpeechError, LANGUAGES, VOICE_OPTIONS, detectLanguage } from './speech.js';
 import os from 'node:os';
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -291,7 +291,7 @@ export async function startServer({
       }
       if (url.pathname === '/api/info') {
         const speech = await speechConfig(skipperDir);
-        return json(res, 200, { name: os.hostname().replace(/\.local$/, ''), readOnly, agent: Boolean(claudeBin), cloudVoice: Boolean(speech), languages: LANGUAGES, version: 1 });
+        return json(res, 200, { name: os.hostname().replace(/\.local$/, ''), readOnly, agent: Boolean(claudeBin), cloudVoice: Boolean(speech), voiceProvider: speech?.provider ?? null, voices: VOICE_OPTIONS, languages: LANGUAGES, version: 1 });
       }
       if (parts[0] === 'api' && parts[1] === 'sessions' && parts.length === 4 && parts[3] === 'conversation') {
         if (!store.get(parts[2])) return json(res, 404, { error: 'Session not found' });
@@ -333,7 +333,10 @@ export async function startServer({
       if (voiceLimited(res)) return;
       const body = await readBody(req);
       try {
-        const { audio, language } = await synthesize(await speechConfig(skipperDir), body.text, { language: body.language });
+        const detected = LANGUAGES.includes(body.language) ? body.language : detectLanguage(String(body.text || ''));
+        // The phone sends its chosen voice per language; the sentence's language decides which one is used.
+        const chosen = body.voices && typeof body.voices === 'object' ? body.voices[detected] : body.voice;
+        const { audio, language } = await synthesize(await speechConfig(skipperDir), body.text, { language: detected, voice: typeof chosen === 'string' ? chosen : undefined });
         res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store', 'Content-Length': audio.length, 'X-Skipper-Language': language });
         return res.end(audio);
       } catch (error) {
