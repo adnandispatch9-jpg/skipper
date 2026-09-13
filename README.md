@@ -16,6 +16,36 @@
 
 </div>
 
+<p align="center"><a href="#quick-start">Quick start</a> · <a href="#never-miss-a-permission-prompt">Permission alerts</a> · <a href="#usage-without-guesswork">Usage</a> · <a href="#keyboard-shortcuts">Shortcuts</a> · <a href="#options">Options</a> · <a href="#privacy-and-security">Privacy</a> · <a href="#faq">FAQ</a></p>
+
+## Quick start
+
+Try it once, no install:
+
+```bash
+npx github:bilol-makhmudov/skipper
+```
+
+Then open **http://localhost:4317**. Skipper finds your sessions in `~/.claude` automatically, and new ones appear the moment they start. Add `--demo --open` for a tour with sample sessions.
+
+### Set it up for everyday use
+
+```bash
+npm install -g github:bilol-makhmudov/skipper
+skipper hooks install     # chime and notify on permission prompts
+skipper service install   # keep it running in the background, start at login
+```
+
+Requires Node.js 20 or newer. Skipper has **zero runtime dependencies**.
+
+### From source
+
+```bash
+git clone https://github.com/bilol-makhmudov/skipper.git
+cd skipper
+npm start          # or: npm run demo
+```
+
 ## Why Skipper?
 
 Running several Claude Code agents at once is powerful and hard to follow. One terminal is waiting for an answer, another has three background subagents in worktrees, a third is a `/loop` sleeping until CI finishes. Skipper answers the question you keep asking: **which session needs me right now?**
@@ -64,35 +94,11 @@ Exact token counts from every response, including subagents, per day, project an
 </tr>
 </table>
 
-Run `skipper --host 0.0.0.0` and open the printed link on your phone to check on agents from the couch.
-
-## Quick start
-
-Try it once, no install:
-
 ```bash
-npx github:bilol-makhmudov/skipper
+skipper --host 0.0.0.0
 ```
 
-Then open **http://localhost:4317**. Skipper finds your sessions in `~/.claude` automatically, and new ones appear the moment they start. Add `--demo --open` for a tour with sample sessions.
-
-### Set it up for everyday use
-
-```bash
-npm install -g github:bilol-makhmudov/skipper
-skipper hooks install     # chime and notify on permission prompts
-skipper service install   # keep it running in the background, start at login
-```
-
-Requires Node.js 20 or newer. Skipper has **zero runtime dependencies**.
-
-### From source
-
-```bash
-git clone https://github.com/bilol-makhmudov/skipper.git
-cd skipper
-npm start          # or: npm run demo
-```
+Skipper prints a link with a one-time access token for every network address. Open it on your phone once and a secure cookie keeps you signed in. Without the token, nothing is served.
 
 ## Never miss a permission prompt
 
@@ -137,14 +143,6 @@ System, Light, Dark, **Midnight** (true black for OLED screens), **Paper** (warm
 | `hooks install` / `uninstall` / `status` | | Manage the permission and turn-finished alerts |
 | `hooks native on` / `off` | off | System notifications for permission prompts, even with no dashboard open |
 | `doctor` | | Check that hooks, notifications, the service and the dashboard are working |
-
-### Check on agents from your phone
-
-```bash
-skipper --host 0.0.0.0
-```
-
-Skipper prints a link with a one-time access token for every network address. Open it on your phone once and a secure cookie keeps you signed in. Without the token, nothing is served.
 
 ### Keep it running in the background
 
