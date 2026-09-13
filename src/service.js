@@ -110,6 +110,12 @@ export async function installService({ nodePath, scriptPath, port = 4317, host =
   if (platform === 'darwin') {
     await fs.mkdir(path.dirname(p.plist), { recursive: true });
     await fs.mkdir(p.logDir, { recursive: true });
+    // On the network the startup banner prints the access token, so the logs stay private to this account.
+    for (const name of ['out.log', 'err.log']) {
+      const file = path.join(p.logDir, name);
+      await (await fs.open(file, 'a', 0o600)).close();
+      await fs.chmod(file, 0o600);
+    }
     const domain = `gui/${process.getuid()}`;
     try {
       run('launchctl', ['bootout', `${domain}/${LABEL}`]);
