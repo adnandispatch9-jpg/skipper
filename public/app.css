@@ -581,3 +581,20 @@ button.box:hover { border-color: var(--accent); }
 .toast.permission .btn { background: #1a0c04; border-color: #1a0c04; color: #ffd9c4; }
 .toast.permission .btn.ghost { background: transparent; border-color: rgb(26 12 4 / 30%); color: #1a0c04; }
 .toast.error .toast-icon { background: rgb(255 255 255 / 18%); color: #fff; }
+
+/* ---------- Redesign: sidebar rail ---------- */
+.rail-nav { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.rail-tab, .rail-project { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 9px; background: none; color: var(--muted); text-align: left; cursor: pointer; }
+.rail-tab span, .rail-project span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail-tab:hover, .rail-project:hover { background: var(--surface-2); color: var(--text); }
+.rail-tab[aria-selected="true"] { background: var(--surface-2); color: var(--text); font-weight: 600; }
+.rail-tab b { font-weight: 650; font-variant-numeric: tabular-nums; color: var(--muted); }
+.rail-tab b.hot { color: var(--permission); }
+.rail-projects { display: flex; flex-direction: column; gap: 1px; padding-bottom: 6px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.rail-projects:empty { display: none; }
+.rail-projects .group-label { align-items: center; margin-top: 10px; }
+.rail-projects .link-btn { font-size: 11px; text-transform: none; letter-spacing: 0; }
+.rail-project { padding: 6px 10px; font-size: 13px; }
+.rail-project small { color: var(--faint); font-variant-numeric: tabular-nums; }
+.rail-project .dot.ended { opacity: .45; }
+.rail-project[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }

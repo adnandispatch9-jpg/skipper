@@ -8,7 +8,8 @@ const state = {
   detail: null,
   serverOffset: 0,
   claudeDir: '',
-  filter: 'active',
+  filter: 'live',
+  project: null,
   query: '',
   sound: false,
   turns: true,
@@ -173,7 +174,11 @@ function reload() {
   }
   loading = load()
     .then(() => setOffline(false))
-    .catch(() => setOffline(true))
+    .catch((error) => {
+      // Only a failed request means the server is gone; anything else is a bug worth seeing.
+      if (error instanceof TypeError || /^\d{3}$/.test(error.message)) setOffline(true);
+      else console.error(error);
+    })
     .finally(() => {
       loading = null;
       if (queued) {
@@ -339,8 +344,10 @@ function matches(s) {
 }
 
 function visibleSessions() {
-  const cutoff = now() - 2 * DAY;
-  return state.sessions.filter((s) => matches(s) && (state.filter === 'all' || state.query || s.live || s.updatedAt > cutoff));
+  return state.sessions.filter((s) =>
+    matches(s) &&
+    (!state.project || s.project === state.project) &&
+    (state.query || (state.filter === 'history' ? !s.live : s.live || s.updatedAt > now() - 2 * DAY)));
 }
 
 function renderPulse() {
@@ -363,7 +370,40 @@ function renderPulse() {
   return { ...counts, agents };
 }
 
+const URGENCY = { permission: 0, waiting: 1, working: 2, sleeping: 3, ended: 4 };
+
+function renderRail() {
+  const live = state.sessions.filter((s) => s.live);
+  const needs = live.filter((s) => s.state === 'permission' || s.state === 'waiting').length;
+  const tab = (id, label, count, dot) =>
+    h('button', { type: 'button', role: 'tab', class: 'rail-tab', 'aria-selected': String(state.filter === id), dataset: { filter: id } },
+      h('i', { class: `dot ${dot}` }), h('span', {}, label), h('b', { class: needs && id === 'live' ? 'hot' : '' }, count));
+  $('#rail-nav').replaceChildren(
+    tab('live', needs ? `Live · ${needs} need${needs === 1 ? 's' : ''} you` : 'Live', live.length, needs ? (live.some((s) => s.state === 'permission') ? 'permission' : 'waiting') : 'working'),
+    tab('history', 'History', state.sessions.length - live.length, 'ended'),
+  );
+
+  const projects = new Map();
+  for (const s of state.sessions) {
+    const p = projects.get(s.project) || { name: s.project, count: 0, state: 'ended', updatedAt: 0 };
+    p.count += 1;
+    if (s.live && URGENCY[s.state] < URGENCY[p.state]) p.state = s.state;
+    p.updatedAt = Math.max(p.updatedAt, s.updatedAt || 0);
+    projects.set(s.project, p);
+  }
+  const list = [...projects.values()]
+    .sort((a, b) => URGENCY[a.state] - URGENCY[b.state] || b.updatedAt - a.updatedAt)
+    .slice(0, 8);
+  $('#rail-projects').replaceChildren(
+    list.length > 1 ? h('div', { class: 'group-label' }, h('span', {}, 'Projects'), state.project ? h('button', { type: 'button', class: 'link-btn', dataset: { project: '' } }, 'Clear') : null) : '',
+    ...(list.length > 1 ? list.map((p) =>
+      h('button', { type: 'button', class: 'rail-project', 'aria-pressed': String(state.project === p.name), dataset: { project: p.name }, title: `Show only ${p.name}` },
+        h('span', {}, p.name), h('small', {}, p.count), h('i', { class: `dot ${p.state}` }))) : []),
+  );
+}
+
 function renderSidebar(currentId) {
+  renderRail();
   const list = visibleSessions();
   const groups = [
     ['Needs permission', list.filter((s) => s.state === 'permission')],
@@ -398,7 +438,7 @@ function renderSidebar(currentId) {
     }
   }
   if (!nodes.length) {
-    nodes.push(h('p', { class: 'empty-list' }, state.query ? 'No sessions match your search.' : 'No active sessions. Switch to All sessions to see history.'));
+    nodes.push(h('p', { class: 'empty-list' }, state.query || state.project ? 'No sessions match this filter.' : state.filter === 'history' ? 'No finished sessions yet.' : 'No live sessions. Open History to see past ones.'));
   }
   $('#session-list').replaceChildren(...nodes);
 }
@@ -1045,16 +1085,20 @@ function init() {
     } catch {}
   }, { once: true });
 
-  state.filter = store.get('skipper.filter') === 'all' ? 'all' : 'active';
-  for (const btn of document.querySelectorAll('[data-filter]')) {
-    btn.setAttribute('aria-selected', String(btn.dataset.filter === state.filter));
-    btn.addEventListener('click', () => {
-      state.filter = btn.dataset.filter;
+  state.filter = store.get('skipper.filter') === 'history' ? 'history' : 'live';
+  $('#sidebar').addEventListener('click', (event) => {
+    const tab = event.target.closest('[data-filter]');
+    const project = event.target.closest('[data-project]');
+    if (tab) {
+      state.filter = tab.dataset.filter;
       store.set('skipper.filter', state.filter);
-      for (const b of document.querySelectorAll('[data-filter]')) b.setAttribute('aria-selected', String(b === btn));
-      render();
-    });
-  }
+    } else if (project) {
+      state.project = project.dataset.project && state.project !== project.dataset.project ? project.dataset.project : null;
+    } else {
+      return;
+    }
+    render();
+  });
 
   const search = $('#search');
   search.addEventListener('input', () => {
