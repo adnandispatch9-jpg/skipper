@@ -310,3 +310,16 @@ test('static files use ETags and large bodies are gzipped only when accepted', a
   assert.equal(zipped.headers['content-encoding'], 'gzip');
   assert.ok(Array.isArray(JSON.parse(gunzipSync(zipped.body)).sessions));
 });
+
+test('close does not wait for open dashboard connections', async () => {
+  const { request, Agent } = await import('node:http');
+  const extra = await startServer({ claudeDir: dir, dataDir: path.join(dir, '.skipper'), port: 0, log: () => {} });
+  const agent = new Agent({ keepAlive: true });
+  await new Promise((resolve) => request(`http://127.0.0.1:${extra.port}/api/sessions`, { agent }, (res) => { res.resume(); res.on('end', resolve); }).end());
+  const stream = request(`http://127.0.0.1:${extra.port}/api/events`, { agent: false });
+  await new Promise((resolve) => { stream.on('response', resolve); stream.on('error', () => {}); stream.end(); });
+  const started = Date.now();
+  await extra.close();
+  assert.ok(Date.now() - started < 1000, `close took ${Date.now() - started}ms`);
+  agent.destroy();
+});

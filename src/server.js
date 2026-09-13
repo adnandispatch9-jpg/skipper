@@ -308,6 +308,8 @@ export async function startServer({
       for (const w of watchers) w.close();
       for (const res of clients) res.end();
       server.close(() => resolve());
+      // Open dashboard tabs hold keep-alive sockets; drop them so a restart is instant.
+      server.closeAllConnections();
     });
 
   return { server, store, port: server.address().port, host, accessToken, close };
