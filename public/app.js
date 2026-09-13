@@ -74,6 +74,7 @@ const ICONS = {
   chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   close: 'M6 6l12 12M18 6 6 18',
   copy: 'M10 8h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2ZM16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2',
+  download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
   bell: 'M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15ZM10 20a2 2 0 0 0 4 0',
 };
 
@@ -610,8 +611,10 @@ function renderUsage() {
     h('div', {},
       h('h1', {}, 'Usage'),
       h('p', { class: 'lede' }, 'Tokens are counted from every response, including subagents, on the day they happened. Dollar cost appears only where Claude Code recorded it, as a total for the whole session.')),
-    h('div', { class: 'segmented usage-range', role: 'tablist', 'aria-label': 'Time range' },
-      USAGE_RANGES.map(([days, label]) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(state.usageDays === days), dataset: { usageDays: String(days) } }, label))));
+    h('div', { class: 'usage-actions' },
+      h('div', { class: 'segmented usage-range', role: 'tablist', 'aria-label': 'Time range' },
+        USAGE_RANGES.map(([days, label]) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(state.usageDays === days), dataset: { usageDays: String(days) } }, label))),
+      h('a', { class: 'btn usage-csv', href: `/api/usage.csv?days=${state.usageDays}`, download: '', title: 'Tokens per day for this range, for spreadsheets' }, icon('download'), 'CSV')));
   if (!u) return h('div', { class: 'usage' }, head, h('p', { class: 'muted' }, 'Loading usage…'));
   if (!u.totals.responses) return h('div', { class: 'usage' }, head, h('p', { class: 'muted' }, 'No responses in this range yet.'));
 

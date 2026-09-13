@@ -62,6 +62,20 @@ function cookie(req, name) {
   return null;
 }
 
+// One CSV row per day for spreadsheets. Fields are quoted when needed, and text that
+// a spreadsheet would run as a formula (=, +, -, @) is prefixed with a quote.
+export function csvField(value) {
+  let text = String(value ?? '');
+  if (typeof value !== 'number' && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+export function usageCsv(usage) {
+  const rows = [['day', 'output_tokens', 'input_tokens']];
+  for (const d of usage.perDay) rows.push([d.day, d.output, d.input]);
+  return `${rows.map((row) => row.map(csvField).join(',')).join('\r\n')}\r\n`;
+}
+
 // Bodies over 1 KB are gzipped when the client accepts it: session lists are
 // mostly repeated keys and shrink about 5x, which matters on a phone over Wi-Fi.
 function send(res, status, body, type = 'application/json; charset=utf-8', extra = {}) {
@@ -192,9 +206,14 @@ export async function startServer({
         if (req.headers['if-none-match'] === etag) return send(res, 304, null, type, { 'Cache-Control': 'no-cache', ETag: etag });
         return send(res, 200, body, type, { 'Cache-Control': 'no-cache', ETag: etag });
       }
-      if (url.pathname === '/api/usage') {
+      if (url.pathname === '/api/usage' || url.pathname === '/api/usage.csv') {
         const days = [1, 7, 14, 30].includes(Number(url.searchParams.get('days'))) ? Number(url.searchParams.get('days')) : 14;
-        return json(res, 200, { now: Date.now(), ...store.usage({ days }) });
+        const usage = store.usage({ days });
+        if (url.pathname === '/api/usage') return json(res, 200, { now: Date.now(), ...usage });
+        const today = usage.perDay.at(-1)?.day ?? 'today';
+        return send(res, 200, usageCsv(usage), 'text/csv; charset=utf-8', {
+          'Content-Disposition': `attachment; filename="skipper-usage-${days}d-${today}.csv"`,
+        });
       }
       if (url.pathname === '/api/activity') {
         const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 100, 1), 300);

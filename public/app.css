@@ -813,6 +813,8 @@ button.box:hover { border-color: var(--accent); }
 .rail-link.current { background: var(--surface-2); color: var(--text); font-weight: 600; }
 .usage { display: flex; flex-direction: column; gap: 18px; max-width: 1200px; }
 .usage-head { margin-bottom: 4px; align-items: flex-end; }
+.usage-actions { display: flex; align-items: center; gap: 10px; }
+.usage-csv { flex: none; }
 .usage-range { display: flex; margin: 0; }
 .usage-range button { padding: 6px 12px; }
 .usage-stats { margin-bottom: 0; }
@@ -842,7 +844,9 @@ button.box:hover { border-color: var(--accent); }
 @media (max-width: 900px) {
   .usage-grid { grid-template-columns: minmax(0, 1fr); }
   .usage-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .usage-range { width: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); display: grid; }
+  .usage-actions { width: 100%; }
+  .usage-range { flex: 1; min-width: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); display: grid; }
+  .usage-range button { padding-inline: 4px; white-space: nowrap; }
   .chart { grid-template-columns: 38px minmax(0, 1fr); }
   .chart-bars { gap: 2px; }
 }

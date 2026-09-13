@@ -323,3 +323,25 @@ test('close does not wait for open dashboard connections', async () => {
   assert.ok(Date.now() - started < 1000, `close took ${Date.now() - started}ms`);
   agent.destroy();
 });
+
+test('usage downloads as CSV for the selected range', async () => {
+  const res = await fetch(`${base}/api/usage.csv?days=7`);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /^text\/csv/);
+  assert.match(res.headers.get('content-disposition'), /^attachment; filename="skipper-usage-7d-\d{4}-\d{2}-\d{2}\.csv"$/);
+  const lines = (await res.text()).trim().split('\r\n');
+  assert.equal(lines[0], 'day,output_tokens,input_tokens');
+  assert.equal(lines.length, 8, 'a header and one row per day');
+  const json = await (await fetch(`${base}/api/usage?days=7`)).json();
+  assert.deepEqual(lines.slice(1), json.perDay.map((d) => `${d.day},${d.output},${d.input}`));
+});
+
+test('CSV fields are quoted and cannot run as spreadsheet formulas', async () => {
+  const { csvField } = await import('../src/server.js');
+  assert.equal(csvField(1200), '1200');
+  assert.equal(csvField(-5), '-5');
+  assert.equal(csvField('a,b'), '"a,b"');
+  assert.equal(csvField('say "hi"'), '"say ""hi"""');
+  assert.equal(csvField('=HYPERLINK("x")'), `"'=HYPERLINK(""x"")"`);
+  assert.equal(csvField('@sum'), "'@sum");
+});
