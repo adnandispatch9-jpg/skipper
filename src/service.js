@@ -23,8 +23,8 @@ ${args}
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>${xml(path.join(logDir, 'out.log'))}</string>
-  <key>StandardErrorPath</key><string>${xml(path.join(logDir, 'err.log'))}</string>
+  <key>StandardOutPath</key><string>${xml(path.posix.join(logDir, 'out.log'))}</string>
+  <key>StandardErrorPath</key><string>${xml(path.posix.join(logDir, 'err.log'))}</string>
 </dict>
 </plist>
 `;
