@@ -10,6 +10,7 @@ cd skipper
 npm run demo      # fictional sessions, no Claude Code data needed
 npm start         # your real ~/.claude
 npm test
+npm run screenshots   # regenerates docs/screenshots from demo data (needs Chrome or Chromium)
 ```
 
 Node.js 20+ is the only requirement. Please keep it that way: Skipper has no runtime dependencies, and new ones need a very good reason.

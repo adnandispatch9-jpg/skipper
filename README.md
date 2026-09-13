@@ -48,6 +48,17 @@ Running several Claude Code agents at once is powerful and hard to follow. One t
 </tr>
 </table>
 
+### On your phone
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/mobile-overview.png" alt="Skipper on a phone: sessions that need you and in-flight work, with a bottom tab bar"></td>
+<td width="50%"><img src="docs/screenshots/mobile-permission.png" alt="A permission prompt on a phone, showing the exact command with a copy button"></td>
+</tr>
+</table>
+
+Run `skipper --host 0.0.0.0` and open the printed link on your phone to check on agents from the couch.
+
 ## Quick start
 
 ```bash
@@ -175,7 +186,7 @@ No. Skipper is an independent open-source project for people who use Claude Code
 
 ## Contributing
 
-Issues and pull requests are welcome. Run `npm test` before you open a PR, and see [CONTRIBUTING.md](CONTRIBUTING.md). If Skipper saves you a trip through your terminals, a ⭐ helps other Claude Code users find it.
+Issues and pull requests are welcome. Run `npm test` before you open a PR (and `npm run screenshots` if you changed visuals), and see [CONTRIBUTING.md](CONTRIBUTING.md). If Skipper saves you a trip through your terminals, a ⭐ helps other Claude Code users find it.
 
 ## License
 

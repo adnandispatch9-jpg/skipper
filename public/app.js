@@ -670,7 +670,7 @@ function composerPanel(d) {
       h('div', { class: 'composer-foot' },
         h('span', { class: 'composer-note', title: d.live ? 'Claude Code has no public way to type into an open terminal, so Skipper resumes the conversation in the background with claude --bg --resume.' : null }, note),
         h('span', { class: 'composer-keys' }, h('kbd', {}, '⌘'), h('kbd', {}, 'Enter')),
-        h('button', { class: 'btn primary', type: 'submit', disabled: state.sending ? true : null }, icon('send'), state.sending ? 'Sending…' : 'Send')),
+        h('button', { class: 'btn primary', type: 'submit', disabled: state.sending ? true : null, 'aria-label': 'Send message' }, icon('send'), state.sending ? 'Sending…' : 'Send')),
     ),
   );
 }
