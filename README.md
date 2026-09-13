@@ -50,7 +50,7 @@ npm start          # or: npm run demo
 
 Running several Claude Code agents at once is powerful and hard to follow. One terminal is waiting for an answer, another has three background subagents in worktrees, a third is a `/loop` sleeping until CI finishes. Skipper answers the question you keep asking: **which session needs me right now?**
 
-- **Needs you, Working, Sleeping.** Every live session gets a clear state, taken from Claude Code's own session status. Sessions waiting on you rise to the top, and the browser tab title shows the count.
+- **Needs you, Working, Sleeping.** Every live session gets a clear state, taken from Claude Code's own session status. Sessions waiting on you rise to the top, the browser tab title shows the count, and the tab icon turns amber or red so a pinned tab still tells you. Sessions started with `claude --bg` are labeled **Background**.
 - **Todo lists and task lists.** Watch Claude's plan fill up in real time, including team task lists with owners and blockers.
 - **Subagents.** Background agents with name, model, worktree branch, and when each one last did something.
 - **`/loop` countdowns.** See when a self-paced loop wakes next and why it went to sleep.
@@ -174,6 +174,8 @@ Your sessions contain your code and prompts, so Skipper treats them that way:
 - **Nothing leaves your machine.** No telemetry, no CDN, no external requests. The UI is plain HTML, CSS and JavaScript served from the package.
 - **Loopback only by default**, with Host header checks against DNS rebinding.
 - **Writes are locked down.** They need a custom header, a JSON body and a same-origin request, and every ID and path is validated. Messages go to the `claude` CLI as an argument list, never through a shell.
+- **Light on the network.** Responses are gzipped and static files are cached with ETags, which keeps phone access over Wi-Fi quick.
+- **Accessible.** Every theme meets WCAG AA contrast (checked by a test), motion respects reduced-motion settings, and status colors stay visible in Windows High Contrast.
 - **Strict Content Security Policy.** Everything is rendered with `textContent`, never raw HTML.
 
 See [SECURITY.md](SECURITY.md) to report a vulnerability.
