@@ -781,3 +781,14 @@ button.box:hover { border-color: var(--accent); }
   .tabbar { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .tab-badge.accent { background: var(--accent); color: var(--on-accent); }
 }
+
+/* ---------- First-run tip ---------- */
+.tip { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto 28px; gap: 14px; align-items: center; margin-bottom: 22px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); border-radius: var(--radius); background: color-mix(in srgb, var(--accent-soft) 60%, var(--surface)); }
+.tip-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.tip-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tip-body span { color: var(--muted); font-size: 13px; }
+.tip-command { min-width: 250px; }
+@media (max-width: 900px) {
+  .tip { grid-template-columns: 36px minmax(0, 1fr) 28px; }
+  .tip-command { grid-column: 1 / -1; min-width: 0; order: 3; }
+}

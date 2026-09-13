@@ -68,6 +68,7 @@ const ICONS = {
   edit: 'M4 20h4L19 9l-4-4L4 16ZM13.5 6.5l4 4',
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
   send: 'M4 12 20 4l-6 16-3-7Z',
+  close: 'M6 6l12 12M18 6 6 18',
   copy: 'M10 8h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2ZM16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2',
   bell: 'M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15ZM10 20a2 2 0 0 0 4 0',
 };
@@ -559,6 +560,20 @@ function renderActivityPage() {
   return h('div', { class: 'activity-page' }, renderActivity({ limit: 120 }));
 }
 
+function hooksTip() {
+  if (!state.hooks || state.hooks.installed || state.readOnly || store.get('skipper.tip.hooks') || new URLSearchParams(location.search).has('static')) return null;
+  const command = 'skipper hooks install';
+  return h('section', { class: 'tip', role: 'note' },
+    h('span', { class: 'tip-icon' }, icon('bell')),
+    h('div', { class: 'tip-body' },
+      h('b', {}, 'Get a chime the moment Claude needs permission'),
+      h('span', {}, 'Connect Claude Code hooks once. Your other settings are kept and a backup is saved.')),
+    h('div', { class: 'command-box tip-command' },
+      h('code', {}, command),
+      h('button', { class: 'icon-btn tiny', type: 'button', title: 'Copy command', 'aria-label': 'Copy command', dataset: { action: 'copy', text: command } }, icon('copy'))),
+    h('button', { class: 'icon-btn tiny tip-close', type: 'button', title: 'Dismiss', 'aria-label': 'Dismiss tip', dataset: { action: 'dismiss-tip', tip: 'hooks' } }, icon('close')));
+}
+
 function renderOverview() {
   const counts = renderPulse();
   if (!state.sessions.length) {
@@ -577,6 +592,7 @@ function renderOverview() {
   const needs = queue.length;
 
   return h('div', { class: 'overview-layout' }, h('div', { class: 'overview' },
+    hooksTip(),
     h('div', { class: 'page-head' },
       h('div', {},
         h('h1', {}, needs ? `${needs} session${needs > 1 ? 's' : ''} need${needs > 1 ? '' : 's'} you` : live.length ? 'Everything is moving' : 'All quiet'),
@@ -952,8 +968,8 @@ const TASK_NEXT = { pending: 'in_progress', in_progress: 'completed', completed:
 
 async function runAction(action, el, form) {
   const d = state.detail;
-  if (!d) return;
-  const base = `/api/sessions/${d.id}`;
+  if (!d && !['copy', 'dismiss-tip'].includes(action)) return;
+  const base = d ? `/api/sessions/${d.id}` : '';
   const value = (name) => form?.elements[name]?.value ?? '';
   try {
     switch (action) {
@@ -1044,6 +1060,10 @@ async function runAction(action, el, form) {
         toast(copied ? 'Command copied' : 'Copy is not available here. Select the command instead.', copied ? '' : 'error');
         return;
       }
+      case 'dismiss-tip':
+        store.set(`skipper.tip.${el.dataset.tip}`, '1');
+        render();
+        return;
       case 'focus-composer':
         focusComposer();
         return;
