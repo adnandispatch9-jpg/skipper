@@ -184,3 +184,26 @@ test('pairing link carries host, port, token and name; Bonjour only on macOS', a
   assert.equal(calls.length, 2);
   assert.deepEqual(lanAddresses({ en0: [{ family: 'IPv4', internal: false, address: '10.0.0.2' }], lo0: [{ family: 'IPv4', internal: true, address: '127.0.0.1' }] }), ['10.0.0.2']);
 });
+
+test('the agent key never appears on the command line', async () => {
+  const { Agent } = await import('../src/agent.js');
+  const { readFileSync, statSync } = await import('node:fs');
+  const { EventEmitter } = await import('node:events');
+  let seen;
+  const spawnImpl = (bin, args) => {
+    seen = args;
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.kill = () => {};
+    setImmediate(() => child.emit('close', 0));
+    return child;
+  };
+  const agent = new Agent({ claudeBin: 'claude', baseUrl: 'http://127.0.0.1:1', agentKey: 'secret-agent-key-123', spawnImpl });
+  await agent.ask({ text: 'hi', onEvent: () => {} });
+  assert.ok(seen, 'claude was started');
+  assert.ok(!seen.join(' ').includes('secret-agent-key-123'));
+  const file = seen[seen.indexOf('--mcp-config') + 1];
+  assert.match(readFileSync(file, 'utf8'), /secret-agent-key-123/);
+  if (process.platform !== 'win32') assert.equal(statSync(file).mode & 0o777, 0o600);
+});

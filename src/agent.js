@@ -3,6 +3,8 @@
 
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
+import os from 'node:os';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { detectLanguage } from './speech.js';
@@ -30,7 +32,7 @@ How to answer:
 export function agentArgs({ mcpConfig, model }) {
   const args = [
     '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
-    '--no-session-persistence', '--strict-mcp-config', '--mcp-config', JSON.stringify(mcpConfig),
+    '--no-session-persistence', '--strict-mcp-config', '--mcp-config', typeof mcpConfig === 'string' ? mcpConfig : JSON.stringify(mcpConfig),
     '--tools', '', '--allowedTools', `${TOOL_PREFIX}list_sessions,${TOOL_PREFIX}get_session,${TOOL_PREFIX}get_conversation,${TOOL_PREFIX}get_activity,${TOOL_PREFIX}get_usage,${TOOL_PREFIX}propose_message`,
     '--setting-sources', '', '--system-prompt', SYSTEM_PROMPT,
   ];
@@ -106,6 +108,18 @@ export class Agent {
     return proposal || null;
   }
 
+  // The config carries the agent key, so it goes in a private file rather than on the
+  // command line, where any local account could read it from the process list.
+  #mcpConfigFile() {
+    if (!this.mcpConfigPath) {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'skipper-agent-'));
+      this.mcpConfigPath = path.join(dir, 'mcp.json');
+      const config = { mcpServers: { skipper: { type: 'stdio', command: process.execPath, args: [BIN, 'mcp'], env: { SKIPPER_URL: this.baseUrl, SKIPPER_AGENT_KEY: this.agentKey } } } };
+      writeFileSync(this.mcpConfigPath, JSON.stringify(config), { mode: 0o600 });
+    }
+    return this.mcpConfigPath;
+  }
+
   // onEvent receives {type: 'conversation'|'status'|'delta'|'proposal'|'done'|'error', ...}.
   ask({ conversationId, text, onEvent, signal }) {
     const [id, conversation] = this.#conversation(conversationId);
@@ -116,11 +130,7 @@ export class Agent {
       onEvent({ type: 'done', text: answer });
       return Promise.resolve();
     }
-    const mcpConfig = {
-      mcpServers: {
-        skipper: { type: 'stdio', command: process.execPath, args: [BIN, 'mcp'], env: { SKIPPER_URL: this.baseUrl, SKIPPER_AGENT_KEY: this.agentKey } },
-      },
-    };
+    const mcpConfig = this.#mcpConfigFile();
     // Smaller models are fast but less fluent in Uzbek; spend a little latency on quality there.
     const model = detectLanguage(text) === 'uz-UZ' ? process.env.SKIPPER_AGENT_MODEL_UZ || 'sonnet' : this.model;
     const args = [...agentArgs({ mcpConfig, model }), '--', promptWithHistory(conversation.turns, text)];
