@@ -321,7 +321,10 @@ export async function startServer({
       try {
         return json(res, 200, await transcribe(await speechConfig(skipperDir), audio, { languages }));
       } catch (error) {
-        if (error instanceof SpeechError) return json(res, error.status, { error: error.message });
+        if (error instanceof SpeechError) {
+          log(`voice transcribe failed: ${error.message}`);
+          return json(res, error.status, { error: error.message });
+        }
         throw error;
       }
     }
@@ -350,6 +353,8 @@ export async function startServer({
       res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
       const controller = new AbortController();
       res.on('close', () => controller.abort());
+      const askedAt = Date.now();
+      let firstText = null;
       await agent.ask({
         conversationId: body.conversationId,
         text,
@@ -357,6 +362,10 @@ export async function startServer({
         onEvent: (event) => {
           if (res.writableEnded) return;
           if (event.type === 'proposal' && readOnly) return;
+          if (event.type === 'delta' && firstText === null) firstText = Date.now() - askedAt;
+          // Timing and outcome only; the question and answer stay out of the log.
+          if (event.type === 'done') log(`agent answered: first words ${firstText ?? '-'}ms, done ${Date.now() - askedAt}ms`);
+          if (event.type === 'error') log(`agent failed after ${Date.now() - askedAt}ms: ${event.message}`);
           const { type, ...data } = event;
           res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
         },
