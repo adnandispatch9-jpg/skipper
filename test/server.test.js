@@ -166,12 +166,32 @@ test('permission hook events put a session in the permission state until it move
 
   const { recordHook } = await import('../src/hooks.js');
   const other = sessions.find((s) => s.title === 'Fix flaky webhook retries');
+
+  // Listen like the browser does: the alert must arrive over Server-Sent Events.
+  const controller = new AbortController();
+  const stream = await fetch(`${base}/api/events`, { signal: controller.signal });
+  const reader = stream.body.getReader();
+  const alert = (async () => {
+    let text = '';
+    const decoder = new TextDecoder();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) return null;
+      text += decoder.decode(value, { stream: true });
+      const match = text.match(/event: alert\ndata: (.+)\n/);
+      if (match) return JSON.parse(match[1]);
+    }
+  })();
+
   await recordHook(JSON.stringify({ hook_event_name: 'Notification', session_id: other.id, message: 'Claude needs your permission to use Edit', notification_type: 'permission_prompt' }), path.join(dir, '.skipper'));
-  await app.store.refresh();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  const received = await alert.catch(() => null);
+  clearTimeout(timeout);
+  controller.abort();
+  assert.ok(received, 'alert event was delivered');
+  assert.equal(received.kind, 'permission');
+  assert.equal(received.title, 'Fix flaky webhook retries');
   assert.equal(app.store.list().find((s) => s.id === other.id).state, 'permission');
-  const alerts = app.store.drainAlerts();
-  assert.equal(alerts.length, 1);
-  assert.equal(alerts[0].title, 'Fix flaky webhook retries');
 
   // New transcript activity after the prompt means it was answered.
   const entry = [...app.store.files.values()].find((e) => e.summary.id === other.id);
