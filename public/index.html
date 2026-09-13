@@ -24,7 +24,7 @@
       <label class="search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input id="search" type="search" placeholder="Search sessions" autocomplete="off" spellcheck="false">
-        <kbd>/</kbd>
+        <kbd title="Press ? for all shortcuts">/</kbd>
       </label>
       <div class="menu-wrap">
         <button class="icon-btn" id="notify-btn" type="button" title="Alerts" aria-haspopup="menu" aria-expanded="false" aria-controls="notify-menu">
@@ -64,6 +64,23 @@
 
   <div class="offline" id="offline" role="status" hidden>Reconnecting to Skipper… Check that <code>skipper</code> is still running.</div>
   <nav class="tabbar" id="tabbar" aria-label="Sections"></nav>
+  <dialog class="shortcuts" id="shortcuts" aria-labelledby="shortcuts-title">
+    <form method="dialog">
+      <div class="shortcuts-head"><h2 id="shortcuts-title">Keyboard shortcuts</h2><button class="icon-btn tiny" value="close" aria-label="Close">×</button></div>
+      <dl>
+        <div><dt><kbd>j</kbd> <kbd>k</kbd></dt><dd>Next or previous session</dd></div>
+        <div><dt><kbd>g</kbd> <kbd>o</kbd></dt><dd>Overview</dd></div>
+        <div><dt><kbd>g</kbd> <kbd>a</kbd></dt><dd>Activity</dd></div>
+        <div><dt><kbd>g</kbd> <kbd>l</kbd></dt><dd>Live sessions</dd></div>
+        <div><dt><kbd>g</kbd> <kbd>h</kbd></dt><dd>History</dd></div>
+        <div><dt><kbd>m</kbd></dt><dd>Message Claude (on a session)</dd></div>
+        <div><dt><kbd>/</kbd></dt><dd>Search</dd></div>
+        <div><dt><kbd>Esc</kbd></dt><dd>Clear search, close menus, go back</dd></div>
+        <div><dt><kbd>⌘</kbd> <kbd>Enter</kbd></dt><dd>Send a message or note</dd></div>
+        <div><dt><kbd>?</kbd></dt><dd>Show this list</dd></div>
+      </dl>
+    </form>
+  </dialog>
   <div class="toasts" id="toasts" aria-live="polite"></div>
 </body>
 </html>

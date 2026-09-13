@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Keyboard shortcuts: `j`/`k` between sessions, `g o|a|l|h` to jump, `m` to message, `?` for the list.
 - `skipper service install | uninstall | status` keeps Skipper running in the background (launchd on macOS, systemd user service on Linux) and waits until it answers.
 - New users see a one-time tip on the overview for turning on permission alerts.
 - The dashboard's pure logic is unit-tested.

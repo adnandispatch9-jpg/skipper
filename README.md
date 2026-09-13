@@ -107,6 +107,10 @@ Choose sound and desktop notifications from the bell menu, and use **Test alert*
 
 System, Light, Dark, **Midnight** (true black for OLED screens), **Paper** (warm and serif) and **High contrast**. Pick one from the moon/sun button in the top bar. Skipper also works as an installable app on your phone or desktop.
 
+## Keyboard shortcuts
+
+`j` / `k` move between sessions, `g o` / `g a` / `g l` / `g h` jump to Overview, Activity, Live and History, `m` focuses the message box, `/` searches, and `?` shows the full list.
+
 ## Options
 
 | Flag | Default | What it does |

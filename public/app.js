@@ -1259,7 +1259,50 @@ function init() {
     state.query = search.value;
     render();
   });
+  let pendingG = 0;
   document.addEventListener('keydown', (event) => {
+    const typing = event.target.closest?.('input, textarea, select, [contenteditable]');
+    const dialog = $('#shortcuts');
+    if (!typing && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (event.key === '?') {
+        event.preventDefault();
+        dialog.open ? dialog.close() : dialog.showModal();
+        return;
+      }
+      if (pendingG && Date.now() - pendingG < 1200) {
+        pendingG = 0;
+        const target = { o: '#/', a: '#/activity', l: '#/sessions', h: '#/sessions' }[event.key];
+        if (target) {
+          event.preventDefault();
+          if (event.key === 'l' || event.key === 'h') {
+            state.filter = event.key === 'h' ? 'history' : 'live';
+            store.set('skipper.filter', state.filter);
+          }
+          if (location.hash === target) render();
+          else location.hash = target;
+          return;
+        }
+      }
+      if (event.key === 'g') {
+        pendingG = Date.now();
+        return;
+      }
+      if (event.key === 'j' || event.key === 'k') {
+        event.preventDefault();
+        const ids = [...document.querySelectorAll('#session-list .session-link')].map((a) => a.getAttribute('href'));
+        if (!ids.length) return;
+        const current = ids.indexOf(location.hash);
+        const next = current === -1 ? 0 : Math.min(ids.length - 1, Math.max(0, current + (event.key === 'j' ? 1 : -1)));
+        location.hash = ids[next];
+        document.querySelector(`#session-list a[href="${ids[next]}"]`)?.scrollIntoView({ block: 'nearest' });
+        return;
+      }
+      if (event.key === 'm' && route().name === 'session' && !state.readOnly) {
+        event.preventDefault();
+        focusComposer();
+        return;
+      }
+    }
     if (event.key === '/' && document.activeElement !== search) {
       event.preventDefault();
       search.focus();

@@ -792,3 +792,15 @@ button.box:hover { border-color: var(--accent); }
   .tip { grid-template-columns: 36px minmax(0, 1fr) 28px; }
   .tip-command { grid-column: 1 / -1; min-width: 0; order: 3; }
 }
+
+/* ---------- Keyboard shortcuts dialog ---------- */
+.shortcuts { width: min(420px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); color: var(--text); box-shadow: 0 24px 60px rgb(0 0 0 / 40%); }
+.shortcuts::backdrop { background: rgb(0 0 0 / 45%); }
+.shortcuts form { padding: 18px 20px 20px; }
+.shortcuts-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.shortcuts h2 { margin: 0; font-size: 16px; letter-spacing: 0; text-transform: none; color: var(--text); }
+.shortcuts dl { margin: 0; display: flex; flex-direction: column; }
+.shortcuts dl div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); align-items: center; }
+.shortcuts dt { display: flex; gap: 4px; }
+.shortcuts dd { margin: 0; color: var(--muted); }
+.shortcuts kbd { color: var(--text); background: var(--surface-2); }
