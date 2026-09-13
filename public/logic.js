@@ -123,3 +123,20 @@ function quietReason(session, nowMs, quietMs = 5 * 60_000) {
   }
   return { kind: 'silent', since: session.updatedAt };
 }
+
+// Tab icon for the attention state: the app icon with its status dot recolored,
+// so a pinned tab shows at a glance when a session needs you.
+const FAVICON_DOT = { clear: '#3ccf8e', waiting: '#f2b33d', permission: '#ef5a52' };
+function faviconHref(kind) {
+  const alert = kind in FAVICON_DOT && kind !== 'clear';
+  const dot = alert ? FAVICON_DOT[kind] : FAVICON_DOT.clear;
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+    + '<rect width="64" height="64" rx="15" fill="#1d2233"/>'
+    + '<path d="M14 40h36l-5 9H19z" fill="#8ea2ff"/>'
+    + '<path d="M31 12v25" stroke="#f6f5f1" stroke-width="3.5" stroke-linecap="round"/>'
+    + '<path d="M34 15c7 3 11 9 12 19H34z" fill="#f6f5f1"/>'
+    + '<path d="M28 20c-5 3-8 8-9 14h9z" fill="#f6f5f1" opacity=".55"/>'
+    + `<circle cx="49" cy="15" r="${alert ? 11 : 5}" fill="${dot}" stroke="#1d2233" stroke-width="${alert ? 3 : 0}"/>`
+    + '</svg>';
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}

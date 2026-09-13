@@ -373,6 +373,11 @@ function renderPulse() {
   );
   const needs = counts.waiting + counts.permission;
   document.title = counts.permission ? `(${needs}) Permission needed · Skipper` : needs ? `(${needs}) Skipper` : 'Skipper';
+  const favicon = document.querySelector('link[rel="icon"]');
+  if (favicon && favicon.dataset.kind !== kind) {
+    favicon.dataset.kind = kind;
+    favicon.href = kind === 'clear' ? '/icon.svg' : faviconHref(kind);
+  }
   return { ...counts, agents };
 }
 

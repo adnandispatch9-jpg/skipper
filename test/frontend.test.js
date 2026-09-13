@@ -32,7 +32,7 @@ test('index.html references only elements app.js expects', () => {
 
 const helpers = (() => {
   const context = {};
-  vm.runInNewContext(`${logic}\n;globalThis.out = { quietReason, formatTokens, niceScale, resumeCommand, formatAgo, formatCountdown, duration, safeHref, toolName, plain, splitAsk, dayBucketAt, groupActivity };`, context);
+  vm.runInNewContext(`${logic}\n;globalThis.out = { quietReason, formatTokens, niceScale, resumeCommand, formatAgo, formatCountdown, duration, safeHref, toolName, plain, splitAsk, dayBucketAt, groupActivity, faviconHref };`, context);
   return context.out;
 })();
 
@@ -108,4 +108,13 @@ test('quiet sessions explain whether a tool is still running', () => {
   assert.equal(running.tool, 'Bash');
   const silent = helpers.quietReason({ ...base, lastTool: { name: 'Bash', at: base.updatedAt - 60_000, pending: false } }, now);
   assert.equal(silent.kind, 'silent');
+});
+
+test('faviconHref marks attention with a larger colored dot', () => {
+  const { faviconHref } = helpers;
+  const decode = (href) => decodeURIComponent(href.replace('data:image/svg+xml,', ''));
+  assert.match(faviconHref('clear'), /^data:image\/svg\+xml,/);
+  assert.match(decode(faviconHref('permission')), /r="11" fill="#ef5a52"/);
+  assert.match(decode(faviconHref('waiting')), /fill="#f2b33d"/);
+  assert.match(decode(faviconHref('bogus')), /r="5" fill="#3ccf8e"/);
 });
