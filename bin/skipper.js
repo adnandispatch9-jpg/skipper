@@ -7,6 +7,7 @@ import { startServer, isLoopback } from '../src/server.js';
 import { writeDemo } from '../src/demo.js';
 import { recordHook, installHooks, uninstallHooks, hooksStatus, readConfig, writeConfig } from '../src/hooks.js';
 import { installService, uninstallService, serviceStatus } from '../src/service.js';
+import { checkNode, checkClaudeDir, checkHooks, checkEvents, checkNative, checkService, checkDashboard, formatReport } from '../src/doctor.js';
 import { fileURLToPath } from 'node:url';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -21,6 +22,7 @@ Usage: skipper [options]
        skipper service install  Keep Skipper running in the background (macOS, Linux)
        skipper service uninstall
        skipper service status
+       skipper doctor           Check that everything is set up and working
 
 Options:
   -p, --port <n>         Port to listen on (default 4317, or $PORT)
@@ -94,6 +96,24 @@ if (argv[0] === 'hook') {
 function stableNode() {
   const name = process.platform === 'win32' ? 'node.exe' : 'node';
   return (process.env.PATH || '').split(path.delimiter).map((dir) => path.join(dir, name)).find((file) => existsSync(file)) || process.execPath;
+}
+
+if (argv[0] === 'doctor') {
+  const claudeDir = defaultClaudeDir();
+  const dataDir = defaultDataDir();
+  const port = Number(process.env.PORT) || 4317;
+  const checks = [
+    checkNode(),
+    await checkClaudeDir(claudeDir),
+    await checkHooks(path.join(claudeDir, 'settings.json')),
+    await checkEvents(dataDir),
+    await checkNative(dataDir),
+  ];
+  const dashboard = await checkDashboard(port);
+  checks.push(checkService({ dashboardUp: dashboard.ok }), dashboard);
+  const { text, problems } = formatReport(checks);
+  console.log(`\n  Skipper ${pkg.version} doctor\n\n${text}\n`);
+  process.exit(problems ? 1 : 0);
 }
 
 if (argv[0] === 'service') {

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `skipper doctor` checks Node, Claude Code data, hooks, recent hook events, notifications, the service and the dashboard, and says what to run for anything missing.
+- Quiet sessions say which tool they are still running.
+- Reply from the Needs you queue opens the session ready to type.
+
 ## 0.5.0 (2026-09-13)
 
 - Refreshes do less work: subagent metadata is read once (62 file reads per refresh down to 5).

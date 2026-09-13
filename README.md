@@ -136,6 +136,7 @@ System, Light, Dark, **Midnight** (true black for OLED screens), **Paper** (warm
 | `-o, --open` | off | Open the dashboard in your browser |
 | `hooks install` / `uninstall` / `status` | | Manage the permission and turn-finished alerts |
 | `hooks native on` / `off` | off | System notifications for permission prompts, even with no dashboard open |
+| `doctor` | | Check that hooks, notifications, the service and the dashboard are working |
 
 ### Check on agents from your phone
 
