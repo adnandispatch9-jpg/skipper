@@ -1,0 +1,51 @@
+{
+  "name": "skipper",
+  "version": "0.1.0",
+  "description": "Mission control for Claude Code: a live local dashboard for sessions, subagents, /loop, todo lists and tasks, with messaging, notes and task editing.",
+  "type": "module",
+  "bin": {
+    "skipper": "bin/skipper.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "public",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node bin/skipper.js",
+    "dev": "node bin/skipper.js --open",
+    "demo": "node bin/skipper.js --demo --open",
+    "test": "node --test test/transcript.test.js test/server.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "claude-code",
+    "claude",
+    "anthropic",
+    "ai-agents",
+    "coding-agent",
+    "dashboard",
+    "subagents",
+    "agent-teams",
+    "todo",
+    "kanban",
+    "developer-tools",
+    "local-first",
+    "monitoring",
+    "cli"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bilol-makhmudov/skipper.git"
+  },
+  "homepage": "https://github.com/bilol-makhmudov/skipper#readme",
+  "bugs": {
+    "url": "https://github.com/bilol-makhmudov/skipper/issues"
+  },
+  "author": "Biloliddin Makhmudov"
+}

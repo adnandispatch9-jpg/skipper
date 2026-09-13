@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#101113" media="(prefers-color-scheme: dark)">
+  <title>Skipper</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/" aria-label="Skipper overview">
+      <img src="/icon.svg" alt="" width="26" height="26">
+      <span>Skipper</span>
+    </a>
+    <div class="pulse-strip" id="pulse" aria-live="polite"></div>
+    <div class="topbar-actions">
+      <label class="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="search" type="search" placeholder="Search sessions" autocomplete="off" spellcheck="false">
+        <kbd>/</kbd>
+      </label>
+      <button class="icon-btn" id="notify-btn" type="button" aria-pressed="false" title="Notify me when a session needs me">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
+      </button>
+      <div class="menu-wrap">
+        <button class="icon-btn" id="theme-btn" type="button" title="Theme" aria-haspopup="menu" aria-expanded="false" aria-controls="theme-menu">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+        </button>
+        <div class="menu" id="theme-menu" role="menu" aria-label="Theme" hidden>
+          <button type="button" role="menuitemradio" data-theme-choice="system"><i class="swatch system"></i>System</button>
+          <button type="button" role="menuitemradio" data-theme-choice="light"><i class="swatch light"></i>Light</button>
+          <button type="button" role="menuitemradio" data-theme-choice="dark"><i class="swatch dark"></i>Dark</button>
+          <button type="button" role="menuitemradio" data-theme-choice="midnight"><i class="swatch midnight"></i>Midnight</button>
+          <button type="button" role="menuitemradio" data-theme-choice="paper"><i class="swatch paper"></i>Paper</button>
+          <button type="button" role="menuitemradio" data-theme-choice="contrast"><i class="swatch contrast"></i>High contrast</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="segmented" role="tablist" aria-label="Session filter">
+        <button type="button" role="tab" data-filter="active" aria-selected="true">Active</button>
+        <button type="button" role="tab" data-filter="all" aria-selected="false">All sessions</button>
+      </div>
+      <nav id="session-list" aria-label="Sessions"></nav>
+    </aside>
+    <main class="main" id="main" tabindex="-1"></main>
+  </div>
+
+  <div class="offline" id="offline" role="status" hidden>Reconnecting to Skipper… Check that <code>skipper</code> is still running.</div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+</body>
+</html>

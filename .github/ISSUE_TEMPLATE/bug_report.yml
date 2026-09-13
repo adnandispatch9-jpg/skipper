@@ -1,0 +1,22 @@
+name: Bug report
+description: Something in Skipper is broken or shows the wrong thing
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you expected, what you saw instead. Please do not paste real transcripts or prompts.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      placeholder: "skipper 0.1.0, Claude Code 2.1.270, Node 22, macOS 15"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
