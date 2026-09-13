@@ -321,14 +321,22 @@ console.log(opts.demo ? '  Demo mode: showing fictional sessions' : `  Reading  
 if (isLoopback(host)) {
   console.log(`  Open      ${localUrl}\n`);
 } else {
-  console.log('  Network access is on. Anyone with this link can read your sessions:');
   const { lanAddresses, pairingLink, advertise, copyToClipboard } = await import('../src/pairing.js');
   const addresses = lanAddresses();
-  for (const a of addresses) console.log(`  Open      http://${a}:${app.port}/?token=${app.accessToken}`);
-  if (addresses.length) {
-    const link = pairingLink({ host: addresses[0], port: app.port, token: app.accessToken });
-    console.log(`\n  iPhone app: open Skipper on the phone, choose Enter the address manually and paste:\n  ${link}`);
-    if (!opts.logDir && copyToClipboard(link)) console.log('  (copied to the clipboard; paste it on your iPhone)');
+  // Only an interactive terminal gets the secret link; a background service must not write it to a log or the clipboard.
+  const interactive = process.stdout.isTTY && !opts.logDir;
+  if (!interactive) {
+    console.log(`  Network access is on (${addresses.map((a) => `${a}:${app.port}`).join(', ') || 'no network address'}).`);
+    console.log(`  Pair a phone: open ${localUrl} on this Mac and click the phone icon.`);
+  } else {
+    console.log('  Network access is on. Anyone with this link can read your sessions:');
+    for (const a of addresses) console.log(`  Open      http://${a}:${app.port}/?token=${app.accessToken}`);
+    if (addresses.length) {
+      const link = pairingLink({ host: addresses[0], port: app.port, token: app.accessToken });
+      console.log(`\n  iPhone app: open Skipper on the phone, choose Enter the address manually and paste:\n  ${link}`);
+      if (copyToClipboard(link)) console.log('  (copied to the clipboard; paste it on your iPhone)');
+    }
+    console.log(`  Or open ${localUrl} on this Mac and click the phone icon for a QR code.`);
   }
   const stopAdvertising = advertise({ port: app.port });
   process.on('exit', stopAdvertising);
