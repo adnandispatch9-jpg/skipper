@@ -238,3 +238,16 @@ test('each question carries a fresh session snapshot so the agent can skip a too
   assert.match(prompt, /"title":"Ship 4\.2"/);
   assert.match(prompt, /The user now says: What needs me\?$/);
 });
+
+test('the agent runs without extended thinking so spoken answers start quickly', async () => {
+  const { Agent } = await import('../src/agent.js');
+  let seen;
+  const spawnImpl = (bin, args, options) => {
+    seen = options.env;
+    const child = { stdout: { on() {} }, stderr: { on() {} }, on(event, fn) { if (event === 'close') setTimeout(() => fn(1), 0); }, kill() {} };
+    return child;
+  };
+  const agent = new Agent({ claudeBin: 'claude', baseUrl: 'http://127.0.0.1:1', agentKey: 'k', spawnImpl });
+  await agent.ask({ text: 'hi', onEvent() {} });
+  assert.equal(seen.MAX_THINKING_TOKENS, process.env.SKIPPER_AGENT_THINKING ?? '0');
+});

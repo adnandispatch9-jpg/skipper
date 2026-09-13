@@ -144,7 +144,8 @@ export class Agent {
     return new Promise((resolve) => {
       let child;
       try {
-        child = this.spawnImpl(this.claudeBin, args, { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, SKIPPER_URL: this.baseUrl } });
+        // Spoken answers are short; extended thinking only adds seconds before the first word.
+        child = this.spawnImpl(this.claudeBin, args, { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, SKIPPER_URL: this.baseUrl, MAX_THINKING_TOKENS: process.env.SKIPPER_AGENT_THINKING ?? '0' } });
       } catch (error) {
         onEvent({ type: 'error', message: `Could not start Claude Code: ${error.message}` });
         resolve();
