@@ -846,3 +846,6 @@ button.box:hover { border-color: var(--accent); }
   .chart { grid-template-columns: 38px minmax(0, 1fr); }
   .chart-bars { gap: 2px; }
 }
+
+.quiet-warning { display: inline-flex; align-items: center; gap: 6px; color: var(--waiting); font-size: 12.5px; font-weight: 550; }
+.quiet-warning svg { width: 14px; height: 14px; }

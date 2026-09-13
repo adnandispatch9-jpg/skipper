@@ -70,6 +70,7 @@ const ICONS = {
   edit: 'M4 20h4L19 9l-4-4L4 16ZM13.5 6.5l4 4',
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
   send: 'M4 12 20 4l-6 16-3-7Z',
+  clock: 'M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z',
   chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   close: 'M6 6l12 12M18 6 6 18',
   copy: 'M10 8h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2ZM16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2',
@@ -104,6 +105,8 @@ function dayBucket(at) {
 }
 
 const relTime = (ms) => h('span', { class: 'rel', dataset: { rel: String(ms || '') } }, ago(ms));
+const QUIET_MS = 5 * 60_000;
+const relTimeBare = (ms) => h('span', { class: 'elapsed', dataset: { since: String(ms || '') } }, duration(now() - ms));
 const elapsedTime = (ms) => h('span', { class: 'elapsed', dataset: { since: String(ms || '') } }, duration(now() - ms));
 const untilTime = (ms) => h('span', { class: 'until', dataset: { until: String(ms || '') } }, countdown(ms));
 
@@ -493,6 +496,7 @@ function sessionCard(s) {
       sleeping ? h('span', { class: 'countdown' }, untilTime(s.loop.wakeAt)) : s.state === 'working' && s.turnStartedAt ? h('span', { class: 'meta', title: 'Time since this turn started' }, 'running ', elapsedTime(s.turnStartedAt)) : h('span', { class: 'meta' }, relTime(s.updatedAt))),
     h('div', { class: 'card-title' }, s.title),
     h('div', { class: 'card-now' }, plain(sleeping && s.loop.reason ? s.loop.reason : s.current || s.lastText || '')),
+    s.state === 'working' && now() - s.updatedAt > QUIET_MS ? h('div', { class: 'quiet-warning', title: 'Working, but nothing has been written for a while. A command may be hanging.' }, icon('clock'), 'No activity for ', relTimeBare(s.updatedAt)) : null,
     segments(s.todoDone, s.todoTotal, Boolean(s.current), sleeping ? 'sleeping' : 'working'),
     h('div', { class: 'card-foot' },
       metaItem('folder', s.project),
@@ -949,6 +953,7 @@ function renderDetail(d) {
           stats.length || d.cost ? h('span', { class: 'meta' }, stats.join(' · '),
             d.cost ? [' · ', h('span', { class: 'plus' }, `+${d.cost.linesAdded}`), ' ', h('span', { class: 'minus' }, `−${d.cost.linesRemoved}`)] : null) : null,
           d.state === 'working' && d.turnStartedAt ? h('span', { class: 'meta' }, 'turn running ', elapsedTime(d.turnStartedAt)) : null,
+          d.state === 'working' && now() - d.updatedAt > QUIET_MS ? h('span', { class: 'meta quiet-warning' }, icon('clock'), 'no activity for ', relTimeBare(d.updatedAt)) : null,
           d.pid ? h('span', { class: 'meta mono faint' }, `pid ${d.pid}`) : null)),
       h('div', { class: 'head-actions' },
         pr && safeHref(pr.url) ? h('a', { class: 'btn', href: safeHref(pr.url), target: '_blank', rel: 'noopener noreferrer' }, icon('pr'), pr.number ? `PR #${pr.number}` : 'Pull request') : null,
