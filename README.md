@@ -173,7 +173,7 @@ Transcripts are read incrementally from the last byte seen, so a history of hund
 
 Your sessions contain your code and prompts, so Skipper treats them that way:
 
-- **Nothing leaves your machine.** No telemetry, no CDN, no external requests. The UI is plain HTML, CSS and JavaScript served from the package.
+- **Nothing leaves your machine.** No telemetry, no CDN, no external requests. The UI is plain HTML, CSS and JavaScript served from the package. The one exception is optional voice for the phone app: spoken answers are read aloud by Microsoft's online voices (edge-tts or Azure), so that answer text is sent to Microsoft. Speech recognition with Whisper stays on the Mac.
 - **Loopback only by default**, with Host header checks against DNS rebinding.
 - **Writes are locked down.** They need a custom header, a JSON body and a same-origin request, and every ID and path is validated. Messages go to the `claude` CLI as an argument list, never through a shell.
 - **Strict Content Security Policy.** Everything is rendered with `textContent`, never raw HTML.

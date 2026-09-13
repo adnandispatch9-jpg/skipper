@@ -100,7 +100,7 @@ async function synthesizeLocal(config, text, lang, voice) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'skipper-voice-'));
   try {
     const output = path.join(dir, 'answer.mp3');
-    await run(config.edgeTts, ['--voice', voice, '--text', text, '--write-media', output], { timeout: 30_000 });
+    await run(config.edgeTts, ['--voice', voice, `--text=${text}`, '--write-media', output], { timeout: 30_000 });
     return { audio: await fs.readFile(output), language: lang };
   } catch {
     throw new SpeechError(502, 'The voice service did not answer. Check the Mac is online.');

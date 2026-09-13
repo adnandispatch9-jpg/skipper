@@ -71,3 +71,19 @@ test('Whisper language detection is read from its log', async () => {
   assert.equal(parseDetectedLanguage('whisper_full_with_state: auto-detected language: tr (p = 0.56)'), 'tr');
   assert.equal(parseDetectedLanguage('nothing here'), null);
 });
+
+test('local voice passes answer text as one argument, even when it starts with a dash', { skip: process.platform === 'win32' && 'needs a POSIX executable' }, async () => {
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { mkdtempSync, writeFileSync, chmodSync, readFileSync } = await import('node:fs');
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'skipper-tts-'));
+  const argsFile = path.join(dir, 'args.json');
+  const fake = path.join(dir, 'edge-tts');
+  writeFileSync(fake, `#!${process.execPath}\nconst a=process.argv.slice(2);require('fs').writeFileSync(${JSON.stringify(argsFile)},JSON.stringify(a));require('fs').writeFileSync(a[a.indexOf('--write-media')+1],'mp3');\n`);
+  chmodSync(fake, 0o755);
+  const { synthesize: speak } = await import('../src/speech.js');
+  const result = await speak({ provider: 'local', edgeTts: fake, voices: VOICES }, '--help me out', { language: 'en-US' });
+  assert.equal(result.audio.toString(), 'mp3');
+  const args = JSON.parse(readFileSync(argsFile, 'utf8'));
+  assert.ok(args.includes('--text=--help me out'), JSON.stringify(args));
+});
