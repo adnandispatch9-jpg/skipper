@@ -158,12 +158,16 @@ test('phones authenticate with a bearer token; the agent key only works from loo
   const remote = await startServer({ claudeDir: dir, dataDir: path.join(dir, '.skipper'), host: '0.0.0.0', port: 0, token: 'phone-token', log: () => {} });
   const url = `http://127.0.0.1:${remote.port}`;
   try {
-    assert.equal((await fetch(`${url}/api/info`)).status, 401);
-    assert.equal((await fetch(`${url}/api/info`, { headers: { authorization: 'Bearer wrong' } })).status, 401);
+    // Pretend to be the phone: another Host name, so the Mac-browser exemption does not apply.
+    const { request } = await import('node:http');
+    const asPhone = (p, headers = {}) => new Promise((resolve) => request(`${url}${p}`, { headers: { host: '192.168.1.5:4317', ...headers } }, (res) => { res.resume(); resolve(res.statusCode); }).end());
+    assert.equal(await asPhone('/api/info'), 401);
+    assert.equal(await asPhone('/api/info', { authorization: 'Bearer wrong' }), 401);
+    assert.equal(await asPhone('/api/info', { authorization: 'Bearer phone-token' }), 200);
     const info = await fetch(`${url}/api/info`, { headers: { authorization: 'Bearer phone-token' } });
     assert.equal(info.status, 200);
     assert.equal(typeof (await info.json()).name, 'string');
-    assert.equal((await fetch(`${url}/api/sessions`, { headers: { 'x-skipper-agent-key': 'guess' } })).status, 401);
+    assert.equal(await asPhone('/api/sessions', { 'x-skipper-agent-key': 'guess' }), 401);
   } finally {
     await remote.close();
     rmSync(dir, { recursive: true, force: true });

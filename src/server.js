@@ -447,8 +447,11 @@ export async function startServer({
       const loopbackPeer = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
       const agentCall = loopbackPeer && req.method === 'GET' && safeEqual(req.headers['x-skipper-agent-key'] ?? '', agentKey);
       const bearer = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1];
+      // The Mac's own browser at localhost stays token-free in network mode, like the default loopback mode.
+      // The Host check keeps DNS rebinding out: a page on another domain cannot send Host: localhost.
+      const localBrowser = loopbackPeer && hostAllowed(req.headers.host, server.address().port);
 
-      if (remote && !agentCall && !(bearer && safeEqual(bearer, accessToken))) {
+      if (remote && !agentCall && !localBrowser && !(bearer && safeEqual(bearer, accessToken))) {
         const given = url.searchParams.get('token');
         if (req.method === 'GET' && given && safeEqual(given, accessToken)) {
           return send(res, 302, '', 'text/plain', {

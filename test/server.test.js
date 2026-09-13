@@ -147,12 +147,17 @@ test('network mode requires the access token', async () => {
   const remote = await startServer({ claudeDir: dir, host: '0.0.0.0', port: 0, token: 'secret-token', log: () => {} });
   const url = `http://127.0.0.1:${remote.port}`;
   try {
-    assert.equal((await fetch(`${url}/api/sessions`)).status, 401);
-    const login = await fetch(`${url}/?token=secret-token`, { redirect: 'manual' });
-    assert.equal(login.status, 302);
-    const cookie = login.headers.get('set-cookie').split(';')[0];
-    assert.equal((await fetch(`${url}/api/sessions`, { headers: { cookie } })).status, 200);
-    assert.equal((await fetch(`${url}/api/sessions`, { headers: { cookie: 'skipper_token=wrong' } })).status, 401);
+    // 127.0.0.1 with Host 127.0.0.1 is the Mac's own browser: no token needed.
+    assert.equal((await fetch(`${url}/api/sessions`)).status, 200);
+    const { request } = await import('node:http');
+    const foreignHost = await new Promise((resolve) => request(`${url}/api/sessions`, { headers: { host: 'evil.example:80' } }, (res) => { res.resume(); resolve(res.statusCode); }).end());
+    assert.equal(foreignHost, 401, 'a rebinding page cannot skip the token');
+    const lan = (p, headers = {}) => new Promise((resolve) => request(`${url}${p}`, { headers: { host: '192.168.1.5:80', ...headers } }, (res) => { res.resume(); resolve(res); }).end());
+    const login = await lan('/?token=secret-token');
+    assert.equal(login.statusCode, 302);
+    const cookie = login.headers['set-cookie'][0].split(';')[0];
+    assert.equal((await lan('/api/sessions', { cookie })).statusCode, 200);
+    assert.equal((await lan('/api/sessions', { cookie: 'skipper_token=wrong' })).statusCode, 401);
   } finally {
     await remote.close();
   }
