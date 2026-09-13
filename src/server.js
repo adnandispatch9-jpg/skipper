@@ -9,6 +9,7 @@ import { Notes, Tasks, ActionError, sendMessage } from './actions.js';
 import { eventsFile, hooksStatus } from './hooks.js';
 import { readConversation } from './conversation.js';
 import { Agent } from './agent.js';
+import { compactSession } from './mcp.js';
 import { speechConfig, transcribe, synthesize, SpeechError, LANGUAGES } from './speech.js';
 import os from 'node:os';
 
@@ -117,7 +118,16 @@ export async function startServer({
   const clients = new Set();
   // The voice agent's tool server calls back into this API over loopback with this key.
   const agentKey = crypto.randomBytes(24).toString('base64url');
-  const agent = new Agent({ claudeBin, agentKey });
+  const agent = new Agent({
+    claudeBin,
+    agentKey,
+    // Handing the agent the session list up front saves it a tool round trip on most questions.
+    snapshot: () => {
+      const sessions = store.list();
+      const live = sessions.filter((s) => s.state !== 'ended');
+      return { now: Date.now(), sessions: [...live, ...sessions.filter((s) => s.state === 'ended').slice(0, 8)].map(compactSession) };
+    },
+  });
   const askTimes = [];
 
   const broadcast = () => {

@@ -8,6 +8,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { detectLanguage } from './speech.js';
+import { compactSession } from './mcp.js';
 
 const BIN = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'skipper.js');
 const TOOL_PREFIX = 'mcp__skipper__';
@@ -20,7 +21,7 @@ export const SYSTEM_PROMPT = `You are Skipper, a voice assistant for someone who
 You can see everything Skipper sees through your tools: every session and its state, plans, task lists, subagents, loops, workflows, background sessions, pull requests, recent activity and token usage.
 
 How to answer:
-- Always look before answering. Call list_sessions first, then drill into specific sessions, conversations or activity as needed. Never guess or invent state.
+- Each question comes with a snapshot of all live sessions (and the most recent ended ones) taken just now. Answer from it directly when it is enough; call tools only for detail it lacks (plans, subagents, conversations, activity, usage, older sessions). Never guess or invent state.
 - Speak naturally and briefly: two to four short sentences unless asked for detail. No markdown, no bullet points, no code blocks, no emoji, no URLs, no session ids.
 - Name sessions by their title. Say times in words ("for about 20 minutes", "at half past three").
 - Put what needs the user first: permission prompts, then questions, then finished work, then what is still running.
@@ -40,10 +41,12 @@ export function agentArgs({ mcpConfig, model }) {
   return args;
 }
 
-export function promptWithHistory(history, text) {
-  if (!history.length) return text;
-  const lines = history.map((turn) => `${turn.role === 'user' ? 'User' : 'You'}: ${turn.text}`);
-  return `Earlier in this voice conversation:\n${lines.join('\n')}\n\nThe user now says: ${text}`;
+export function promptWithHistory(history, text, snapshot = null) {
+  const parts = [];
+  if (snapshot) parts.push(`Snapshot of sessions at ${new Date(snapshot.now).toISOString()} (times are epoch milliseconds):\n${JSON.stringify(snapshot.sessions)}`);
+  if (history.length) parts.push(`Earlier in this voice conversation:\n${history.map((turn) => `${turn.role === 'user' ? 'User' : 'You'}: ${turn.text}`).join('\n')}`);
+  if (!parts.length) return text;
+  return `${parts.join('\n\n')}\n\nThe user now says: ${text}`;
 }
 
 const STATUS = {
@@ -87,8 +90,8 @@ export function eventsFromLine(line) {
 }
 
 export class Agent {
-  constructor({ claudeBin = 'claude', baseUrl, agentKey, model = process.env.SKIPPER_AGENT_MODEL || 'haiku', now = Date.now, spawnImpl = spawn }) {
-    Object.assign(this, { claudeBin, baseUrl, agentKey, model, now, spawnImpl });
+  constructor({ claudeBin = 'claude', baseUrl, agentKey, model = process.env.SKIPPER_AGENT_MODEL || 'haiku', now = Date.now, spawnImpl = spawn, snapshot = null }) {
+    Object.assign(this, { claudeBin, baseUrl, agentKey, model, now, spawnImpl, snapshot });
     this.conversations = new Map(); // id -> { turns, at }
     this.proposals = new Map(); // id -> { sessionId, text, at }
   }
@@ -133,7 +136,11 @@ export class Agent {
     const mcpConfig = this.#mcpConfigFile();
     // Smaller models are fast but less fluent in Uzbek; spend a little latency on quality there.
     const model = detectLanguage(text) === 'uz-UZ' ? process.env.SKIPPER_AGENT_MODEL_UZ || 'sonnet' : this.model;
-    const args = [...agentArgs({ mcpConfig, model }), '--', promptWithHistory(conversation.turns, text)];
+    let snapshot = null;
+    try {
+      snapshot = this.snapshot?.() ?? null;
+    } catch {}
+    const args = [...agentArgs({ mcpConfig, model }), '--', promptWithHistory(conversation.turns, text, snapshot)];
     return new Promise((resolve) => {
       let child;
       try {

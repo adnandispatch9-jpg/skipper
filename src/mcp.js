@@ -42,18 +42,21 @@ export const TOOLS = [
 const clamp = (value, min, max, fallback) => (Number.isFinite(Number(value)) ? Math.min(Math.max(Number(value), min), max) : fallback);
 const ID = /^[0-9a-f-]{36}$/i;
 
+export function compactSession(s) {
+  return {
+    id: s.id, title: s.title, project: s.project, state: s.state, background: s.background, branch: s.branch,
+    updatedAt: s.updatedAt, turnStartedAt: s.turnStartedAt, plan: s.todoTotal ? `${s.todoDone}/${s.todoTotal}` : null,
+    current: s.current, lastTool: s.lastTool, agentsRunning: s.agentsRunning, agentsTotal: s.agentsTotal,
+    loop: s.loop, prCount: s.prCount, team: s.team, attention: s.attention,
+  };
+}
+
 export function createToolRunner({ baseUrl, agentKey, fetchImpl = fetch }) {
   const get = async (pathname) => {
     const res = await fetchImpl(`${baseUrl}${pathname}`, { headers: { 'X-Skipper-Agent-Key': agentKey } });
     if (!res.ok) throw new Error(`Skipper answered ${res.status}`);
     return res.json();
   };
-  const compactSession = (s) => ({
-    id: s.id, title: s.title, project: s.project, state: s.state, background: s.background, branch: s.branch,
-    updatedAt: s.updatedAt, turnStartedAt: s.turnStartedAt, plan: s.todoTotal ? `${s.todoDone}/${s.todoTotal}` : null,
-    current: s.current, lastTool: s.lastTool, agentsRunning: s.agentsRunning, agentsTotal: s.agentsTotal,
-    loop: s.loop, prCount: s.prCount, team: s.team, attention: s.attention,
-  });
 
   return async function run(name, args = {}) {
     switch (name) {

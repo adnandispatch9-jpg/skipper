@@ -227,3 +227,10 @@ test('the pairing code is only handed to the Mac itself', async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('each question carries a fresh session snapshot so the agent can skip a tool call', () => {
+  const prompt = promptWithHistory([], 'What needs me?', { now: Date.UTC(2026, 8, 13, 20), sessions: [{ id: ID, title: 'Ship 4.2', state: 'permission' }] });
+  assert.match(prompt, /^Snapshot of sessions at 2026-09-13T20:00:00\.000Z/);
+  assert.match(prompt, /"title":"Ship 4\.2"/);
+  assert.match(prompt, /The user now says: What needs me\?$/);
+});
