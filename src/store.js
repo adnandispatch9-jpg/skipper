@@ -68,6 +68,7 @@ export class Store {
     this.signature = '';
     this.workflowCache = new Map();
     this.subagentFiles = new Map(); // subagent transcript -> { usage }
+    this.metaCache = new Map(); // subagent meta.json path -> parsed metadata
   }
 
   async refresh() {
@@ -146,7 +147,13 @@ export class Store {
     const extras = { subagents: new Map(), workflows: new Map() };
     for (const file of await listDir(path.join(dir, 'subagents'))) {
       if (!file.name.endsWith('.meta.json')) continue;
-      const meta = await readJson(path.join(dir, 'subagents', file.name));
+      // Subagent metadata is written once when the agent starts, so read it once.
+      const metaPath = path.join(dir, 'subagents', file.name);
+      let meta = this.metaCache.get(metaPath);
+      if (!meta) {
+        meta = await readJson(metaPath);
+        if (meta) this.metaCache.set(metaPath, meta);
+      }
       if (!meta) continue;
       let lastActiveAt = null;
       const log = path.join(dir, 'subagents', file.name.replace('.meta.json', '.jsonl'));
