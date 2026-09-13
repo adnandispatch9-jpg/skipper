@@ -31,6 +31,7 @@ export function createSummary(sessionId) {
     agents: new Map(),
     workflows: new Map(),
     loop: null,
+    wakeups: [], // times ScheduleWakeup was called, for labelling loop ticks
     prs: new Map(),
     artifacts: new Map(),
     cost: null,
@@ -107,6 +108,10 @@ function applyToolUse(s, block, at) {
       endedAt: null,
     });
   } else if (block.name === 'ScheduleWakeup') {
+    if (at != null && !input.stop) {
+      s.wakeups.push(at);
+      if (s.wakeups.length > 300) s.wakeups.splice(0, s.wakeups.length - 200);
+    }
     if (input.stop) {
       s.loop = { active: false, at, reason: null, wakeAt: null };
     } else {

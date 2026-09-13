@@ -56,6 +56,7 @@ export class Store {
     this.eventsOffset = 0;
     this.attention = new Map(); // sessionId -> latest permission/question hook event
     this.pendingAlerts = [];
+    this.events = []; // recent hook events for the activity feed
     this.claudeDir = claudeDir;
     this.now = now;
     this.isAlive = isAlive;
@@ -202,6 +203,7 @@ export class Store {
     if (stat.size < this.eventsOffset) {
       // The hook rotated the log: re-read it for state, but do not ring old alerts again.
       this.eventsOffset = 0;
+      this.events = [];
       replay = true;
     }
     if (stat.size === this.eventsOffset) return;
@@ -227,6 +229,8 @@ export class Store {
       }
       if (!isSessionId(event.sessionId) || !Number.isFinite(event.at)) continue;
       if (event.kind === 'permission' || event.kind === 'question') this.attention.set(event.sessionId, event);
+      this.events.push(event);
+      if (this.events.length > 600) this.events.splice(0, this.events.length - 500);
       // Replaying an old log on startup must not ring every bell at once.
       if (!replay && this.now() - event.at < 60_000) this.pendingAlerts.push(event);
     }
@@ -391,6 +395,52 @@ export class Store {
       });
     }
     return out.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  }
+
+  // One timeline across sessions, newest first. Built from data already on disk.
+  activity({ limit = 100, since = this.now() - 7 * 86_400_000 } = {}) {
+    const items = [];
+    const summaries = this.#summaries();
+    const titles = new Map();
+    for (const s of summaries.values()) titles.set(s.id, { title: sessionTitle(s), project: s.cwd ? path.basename(s.cwd) : 'unknown' });
+    const push = (sessionId, at, kind, text, detail = null) => {
+      if (!Number.isFinite(at) || at < since) return;
+      const meta = titles.get(sessionId) || { title: sessionId.slice(0, 8), project: null };
+      items.push({ id: `${kind}:${sessionId}:${at}:${items.length}`, at, kind, text, detail, sessionId, title: meta.title, project: meta.project });
+    };
+
+    // Only the newest turn per session can show its message; older text is gone.
+    const newestDone = new Map();
+    for (const event of this.events) if (event.kind === 'done') newestDone.set(event.sessionId, event);
+    for (const event of this.events) {
+      const s = summaries.get(event.sessionId);
+      if (event.kind === 'permission') push(event.sessionId, event.at, 'permission', 'Permission asked', event.message);
+      else if (event.kind === 'question') push(event.sessionId, event.at, 'question', 'Claude asked you something', event.message);
+      else if (event.kind === 'idle') push(event.sessionId, event.at, 'waiting', 'Waiting for your input', null);
+      else if (event.kind === 'done') {
+        // A turn that scheduled a wakeup shortly before it ended is a loop tick.
+        const looped = s?.wakeups?.some((t) => t <= event.at && event.at - t < 5 * 60_000);
+        const latest = newestDone.get(event.sessionId) === event;
+        if (looped) push(event.sessionId, event.at, 'loop', 'Loop went to sleep', latest ? s.loop?.reason ?? null : null);
+        else push(event.sessionId, event.at, 'turn', 'Turn finished', latest && s.lastText ? s.lastText.split('\n')[0].slice(0, 160) : null);
+      }
+    }
+    for (const s of summaries.values()) {
+      for (const agent of s.agents.values()) {
+        const name = agent.name || agent.description || agent.agentType;
+        push(s.id, agent.startedAt, 'agent-start', 'Subagent started', name);
+        if (agent.endedAt && agent.status !== 'running') {
+          push(s.id, agent.endedAt, agent.status === 'failed' ? 'agent-failed' : 'agent-done', agent.status === 'failed' ? 'Subagent failed' : 'Subagent finished', agent.result ? `${name} · ${agent.result.split('\n')[0].slice(0, 120)}` : name);
+        }
+      }
+      for (const pr of s.prs.values()) push(s.id, pr.at, 'pr', 'Pull request opened', pr.repo && pr.number ? `${pr.repo}#${pr.number}` : pr.url);
+      for (const artifact of s.artifacts.values()) push(s.id, artifact.at, 'artifact', 'Artifact published', artifact.title);
+      for (const run of this.extras.get(s.id)?.workflows.values() || []) {
+        if (run.startedAt && run.durationMs != null) push(s.id, run.startedAt + run.durationMs, 'workflow', `Workflow ${run.status || 'finished'}`, [run.name, run.agentCount != null ? `${run.agentCount} agents` : null].filter(Boolean).join(' · '));
+      }
+      if (!this.live.has(s.id) && s.updatedAt) push(s.id, s.updatedAt, 'ended', 'Session ended', s.cost ? `$${s.cost.usd.toFixed(2)}` : null);
+    }
+    return items.sort((a, b) => b.at - a.at).slice(0, limit);
   }
 
   get(id) {

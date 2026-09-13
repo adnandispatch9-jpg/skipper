@@ -190,7 +190,12 @@ export async function writeDemo(dir, { pid = process.pid, now = Date.now() } = {
     await save('mobile-app', id, b, { live: true });
     const events = path.join(dir, '.skipper');
     await fs.mkdir(events, { recursive: true });
-    await fs.writeFile(path.join(events, 'events.jsonl'), `${JSON.stringify({ at: now - 80_000, sessionId: id, kind: 'permission', message: 'Claude needs your permission to use Bash: bundle exec fastlane beta' })}\n`);
+    const demoEvents = [
+      { at: now - 7 * MIN, sessionId: uuid('webhooks'), kind: 'done', message: null },
+      { at: now - 3 * MIN + 2000, sessionId: uuid('offline'), kind: 'done', message: null },
+      { at: now - 80_000, sessionId: id, kind: 'permission', message: 'Claude needs your permission to use Bash: bundle exec fastlane beta' },
+    ];
+    await fs.writeFile(path.join(events, 'events.jsonl'), demoEvents.map((e) => JSON.stringify(e)).join('\n') + '\n');
   }
 
   // Ended sessions.

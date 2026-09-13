@@ -198,3 +198,28 @@ test('permission hook events put a session in the permission state until it move
   entry.summary.updatedAt = Date.now() + 1000;
   assert.equal(app.store.list().find((s) => s.id === other.id).state === 'permission', false);
 });
+
+test('activity feed merges hook events, subagents, PRs, workflows and ended sessions', async () => {
+  const { items } = await (await fetch(`${base}/api/activity`)).json();
+  const kinds = new Set(items.map((i) => i.kind));
+  for (const kind of ['permission', 'loop', 'turn', 'agent-start', 'agent-done', 'pr', 'workflow', 'ended']) assert.ok(kinds.has(kind), `missing ${kind}`);
+  for (let i = 1; i < items.length; i++) assert.ok(items[i - 1].at >= items[i].at, 'newest first');
+  const loop = items.find((i) => i.kind === 'loop');
+  assert.equal(loop.title, 'offline-sync-loop');
+  assert.equal((await (await fetch(`${base}/api/activity?limit=3`)).json()).items.length, 3);
+});
+
+test('activity: only the newest finished turn of a session carries its message', async () => {
+  const { recordHook } = await import('../src/hooks.js');
+  const { sessions } = await (await fetch(`${base}/api/sessions`)).json();
+  const docs = sessions.find((s) => s.title === 'Migrate docs to the new theme');
+  for (let i = 0; i < 2; i++) {
+    await recordHook(JSON.stringify({ hook_event_name: 'Stop', session_id: docs.id }), path.join(dir, '.skipper'));
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  await app.store.refresh();
+  const turns = app.store.activity().filter((i) => i.sessionId === docs.id && i.kind === 'turn');
+  assert.equal(turns.length, 2);
+  assert.ok(turns[0].detail, 'newest has text');
+  assert.equal(turns[1].detail, null, 'older has none');
+});
