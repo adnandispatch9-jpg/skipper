@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-09-13)
 
 - Finished sessions get a Resume button that copies `cd <project> && claude --resume <id>`.
 - Keyboard shortcuts: `j`/`k` between sessions, `g o|a|l|h` to jump, `m` to message, `?` for the list.

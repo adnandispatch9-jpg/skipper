@@ -62,17 +62,23 @@ Run `skipper --host 0.0.0.0` and open the printed link on your phone to check on
 
 ## Quick start
 
+Try it once, no install:
+
 ```bash
 npx github:bilol-makhmudov/skipper
 ```
 
-Then open **http://localhost:4317**. Skipper finds your sessions in `~/.claude` automatically, and new ones appear the moment they start.
+Then open **http://localhost:4317**. Skipper finds your sessions in `~/.claude` automatically, and new ones appear the moment they start. Add `--demo --open` for a tour with sample sessions.
 
-No Claude Code data yet, or want a tour first?
+### Set it up for everyday use
 
 ```bash
-npx github:bilol-makhmudov/skipper --demo --open
+npm install -g github:bilol-makhmudov/skipper
+skipper hooks install     # chime and notify on permission prompts
+skipper service install   # keep it running in the background, start at login
 ```
+
+Requires Node.js 20 or newer. Skipper has **zero runtime dependencies**.
 
 ### From source
 
@@ -81,8 +87,6 @@ git clone https://github.com/bilol-makhmudov/skipper.git
 cd skipper
 npm start          # or: npm run demo
 ```
-
-Requires Node.js 20 or newer. There is nothing to install: Skipper has **zero runtime dependencies**.
 
 ## Never miss a permission prompt
 
