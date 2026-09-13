@@ -72,7 +72,8 @@ function applyNotification(s, text, at) {
 
 function applyToolUse(s, block, at) {
   const input = block.input || {};
-  s.lastTool = { name: block.name, at };
+  const target = input.file_path || input.notebook_path || input.command || input.pattern || input.url || input.query || input.description || input.skill || null;
+  s.lastTool = { name: block.name, at, target: typeof target === 'string' ? clip(target.split('\n')[0], 160) : null };
 
   if (block.name === 'TodoWrite' && Array.isArray(input.todos)) {
     s.todos = input.todos.map((t) => ({

@@ -30,7 +30,7 @@ Running several Claude Code agents at once is powerful and hard to follow. One t
 
 ## Steer, not just watch
 
-<img src="docs/screenshots/session-light.png" alt="Session page with message composer, notes, plan and linked pull request" width="100%">
+<img src="docs/screenshots/session-light.png" alt="Session page: what Claude is doing now, the running tool, the plan, subagents and notes" width="100%">
 
 - **Message Claude.** Type the next instruction and Skipper hands it to the official CLI (`claude --bg --resume <session>`), so the session continues in the background. Attach any time with `claude attach`.
 - **Edit tasks.** Add, rename, complete and delete tasks in a session's task list. Deleting a task that still blocks others is refused.

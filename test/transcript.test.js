@@ -67,3 +67,8 @@ test('sidechain records are ignored and malformed records do not throw', () => {
   const s = fold([null, 42, { type: 'assistant', isSidechain: true, message: { content: [{ type: 'text', text: 'nope' }] } }]);
   assert.equal(s.lastText, null);
 });
+
+test('last tool records what it is working on', () => {
+  const s = fold([tool('Edit', { file_path: 'src/checkout/PaymentStep.tsx', old_string: 'a' }, 'e1'), tool('Bash', { command: 'npm test\nnpm run lint' }, 'b1', 2)]);
+  assert.deepEqual({ name: s.lastTool.name, target: s.lastTool.target }, { name: 'Bash', target: 'npm test' });
+});

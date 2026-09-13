@@ -632,16 +632,14 @@ function attentionPanel(d) {
 
 function composerPanel(d) {
   if (state.readOnly) return null;
-  const hint = d.live
-    ? 'This session is open in a terminal. Sending starts a background copy that continues from here; the open terminal will not see the message.'
-    : 'Continues this session in the background with claude --bg --resume. Open it any time with claude attach.';
-  return h('section', { class: `panel composer${d.live ? ' warn' : ''}`, id: 'composer' },
-    h('div', { class: 'panel-head' }, h('h2', {}, 'Message Claude'), h('span', { class: 'meta' }, h('kbd', {}, '⌘'), h('kbd', {}, 'Enter'))),
+  const note = d.live ? 'Open in a terminal · sends to a background copy' : 'Continues in the background · claude attach to open';
+  return h('section', { class: `composer-dock${d.live ? ' warn' : ''}`, id: 'composer' },
     h('form', { dataset: { action: 'message-send' } },
-      h('textarea', { name: 'message', rows: '3', maxlength: '20000', placeholder: d.state === 'waiting' ? 'Answer Claude or give the next instruction…' : 'Tell Claude what to do next…', 'aria-label': 'Message to Claude', dataset: { draft: 'message' } }, state.drafts.message[d.id] || ''),
+      h('textarea', { name: 'message', rows: '2', maxlength: '20000', placeholder: d.state === 'waiting' ? 'Answer Claude or give the next instruction…' : 'Tell Claude what to do next…', 'aria-label': 'Message to Claude', dataset: { draft: 'message' } }, state.drafts.message[d.id] || ''),
       h('div', { class: 'composer-foot' },
-        h('p', { class: 'hint' }, hint),
-        h('button', { class: 'btn primary', type: 'submit', disabled: state.sending ? true : null }, state.sending ? 'Sending…' : 'Send')),
+        h('span', { class: 'composer-note', title: d.live ? 'Claude Code has no public way to type into an open terminal, so Skipper resumes the conversation in the background with claude --bg --resume.' : null }, note),
+        h('span', { class: 'composer-keys' }, h('kbd', {}, '⌘'), h('kbd', {}, 'Enter')),
+        h('button', { class: 'btn primary', type: 'submit', disabled: state.sending ? true : null }, icon('send'), state.sending ? 'Sending…' : 'Send')),
     ),
   );
 }
@@ -678,21 +676,18 @@ function agentsPanel(d) {
   if (!d.agents.length) return null;
   const running = d.agents.filter((a) => a.status === 'running').length;
   return panel('Subagents', h('span', { class: 'meta' }, `${running} running · ${d.agents.length} total`),
-    h('div', { class: 'items' }, d.agents.slice(0, 12).map((a) =>
-      h('div', { class: 'item' },
-        h('div', { class: 'item-top' },
-          h('span', { class: 'item-title' }, a.name || a.description || a.agentType),
-          h('span', { class: `chip ${a.status}` }, a.status),
-        ),
-        a.name && a.description ? h('span', { class: 'muted' }, a.description) : null,
-        h('div', { class: 'meta-row' },
-          h('span', { class: 'meta' }, icon('bot'), a.agentType),
-          a.model ? h('span', { class: 'meta' }, icon('chip'), a.model) : null,
-          a.worktreeBranch ? h('span', { class: 'meta' }, icon('branch'), a.worktreeBranch) : null,
-          a.background ? h('span', { class: 'meta' }, 'background') : null,
-          h('span', { class: 'meta' }, a.status === 'running' && a.lastActiveAt ? ['active ', relTime(a.lastActiveAt)] : ['started ', relTime(a.startedAt)]),
-        ),
-        a.result && a.status !== 'running' ? h('div', { class: 'item-result' }, plain(a.result)) : null,
+    h('div', { class: 'agent-rows' }, d.agents.slice(0, 12).map((a) =>
+      h('div', { class: `agent-row ${a.status}` },
+        h('i', { class: `dot agent-${a.status}` }),
+        h('div', { class: 'agent-main' },
+          h('span', { class: 'agent-name' }, a.name || a.description || a.agentType, a.name && a.description ? h('span', { class: 'muted' }, ` · ${a.description}`) : null),
+          h('span', { class: 'agent-meta' },
+            a.model ? h('span', {}, a.model) : h('span', {}, a.agentType),
+            a.worktreeBranch ? h('span', { class: 'meta' }, icon('branch'), a.worktreeBranch) : null,
+            a.background ? h('span', {}, 'background') : null),
+          a.result && a.status !== 'running' ? h('span', { class: 'item-result' }, plain(a.result)) : null),
+        h('span', { class: 'agent-when' },
+          a.status === 'running' ? (a.lastActiveAt ? ['active ', relTime(a.lastActiveAt)] : ['started ', relTime(a.startedAt)]) : a.status === 'completed' ? 'done' : a.status),
       ),
     )),
     d.agents.length > 12 ? h('p', { class: 'muted' }, `+ ${d.agents.length - 12} earlier subagents`) : null,
@@ -761,36 +756,46 @@ function renderDetail(d) {
   if (!d) {
     return h('div', { class: 'empty' }, h('h1', {}, 'Session not found'), h('p', {}, h('a', { href: '#/' }, 'Back to overview')));
   }
-  const strip = (label, value) => h('div', {}, h('dt', {}, label), h('dd', {}, value));
-  const nowPanel = d.lastText
-    ? panel(d.state === 'ended' ? 'Last message' : 'Latest from Claude', h('span', { class: 'meta' }, relTime(d.lastTextAt)),
-      h('p', { class: 'quote clamp' }, plain(d.lastText)),
-      d.lastTool && d.state !== 'ended' ? h('p', { class: 'meta', style: 'margin:12px 0 0' }, 'Last tool ', h('span', { class: 'chip mono' }, toolName(d.lastTool.name)), relTime(d.lastTool.at)) : null)
+  const running = d.state === 'working';
+  const nowPanel = d.lastText || d.lastTool
+    ? h('section', { class: 'panel now-panel' },
+      h('div', { class: 'panel-head' }, h('h2', {}, d.state === 'ended' ? 'Last message' : 'Now'), h('span', { class: 'meta' }, relTime(d.lastTextAt || d.updatedAt))),
+      d.lastText ? h('p', { class: 'quote clamp now-text' }, plain(d.lastText)) : null,
+      d.lastTool && d.state !== 'ended'
+        ? h('div', { class: 'tool-row' },
+          h('span', { class: 'chip mono' }, toolName(d.lastTool.name)),
+          d.lastTool.target ? h('span', { class: 'tool-target mono' }, d.lastTool.target) : null,
+          h('span', { class: `tool-when${running ? ' live' : ''}` }, running ? 'running' : relTime(d.lastTool.at)))
+        : null)
     : null;
+  const pr = d.prs[d.prs.length - 1];
+  const stats = [
+    d.startedAt && d.updatedAt ? duration(d.updatedAt - d.startedAt) : null,
+    d.turns ? `${d.turns} turn${d.turns === 1 ? '' : 's'}` : null,
+    d.cost ? `$${d.cost.usd.toFixed(2)}` : null,
+  ].filter(Boolean);
 
-  return h('article', {},
-    h('a', { class: 'back', href: '#/' }, icon('back'), 'Overview'),
-    h('header', { class: 'detail-head' },
-      h('span', { class: `chip ${d.state}` }, h('i', { class: `dot ${d.state}` }), STATE_LABEL[d.state]),
-      h('h1', {}, d.title),
-      h('div', { class: 'meta-row' },
-        d.cwd ? h('span', { class: 'meta mono', title: d.cwd }, icon('folder'), d.cwd) : null,
-        d.branch && d.branch !== 'HEAD' ? h('span', { class: 'meta' }, icon('branch'), d.branch) : null,
-        d.model ? h('span', { class: 'meta' }, icon('chip'), d.model) : null,
-        d.permissionMode ? h('span', { class: 'meta' }, `${d.permissionMode} mode`) : null,
-        d.pid ? h('span', { class: 'meta mono' }, `pid ${d.pid}`) : null,
-      ),
-    ),
-    h('dl', { class: 'strip' },
-      strip('Last activity', relTime(d.updatedAt)),
-      strip('Duration', duration(d.updatedAt - d.startedAt)),
-      strip('Turns', d.turns || '—'),
-      strip('Cost', d.cost ? `$${d.cost.usd.toFixed(2)}` : '—'),
-      strip('Lines', d.cost ? `+${d.cost.linesAdded} −${d.cost.linesRemoved}` : '—'),
-    ),
+  return h('article', { class: 'session-page' },
+    h('nav', { class: 'crumbs', 'aria-label': 'Breadcrumb' },
+      h('a', { href: '#/' }, icon('back'), d.live ? 'Live' : 'History'), h('span', {}, '/'), h('span', {}, d.project)),
+    h('header', { class: 'session-head' },
+      h('div', { class: 'session-title' },
+        h('div', { class: 'title-row' },
+          h('h1', {}, d.title),
+          h('span', { class: `chip ${d.state}` }, h('i', { class: `dot ${d.state}` }), STATE_LABEL[d.state])),
+        h('div', { class: 'meta-line' },
+          d.cwd ? h('span', { class: 'meta mono', title: d.cwd }, icon('folder'), d.cwd.replace(/^\/(Users|home)\/[^/]+/, '~')) : null,
+          d.branch && d.branch !== 'HEAD' ? h('span', { class: 'meta' }, icon('branch'), d.branch) : null,
+          d.model ? h('span', { class: 'meta' }, [d.model, d.permissionMode ? `${d.permissionMode} mode` : null].filter(Boolean).join(' · ')) : null,
+          stats.length || d.cost ? h('span', { class: 'meta' }, stats.join(' · '),
+            d.cost ? [' · ', h('span', { class: 'plus' }, `+${d.cost.linesAdded}`), ' ', h('span', { class: 'minus' }, `−${d.cost.linesRemoved}`)] : null) : null,
+          d.pid ? h('span', { class: 'meta mono faint' }, `pid ${d.pid}`) : null)),
+      h('div', { class: 'head-actions' },
+        pr && safeHref(pr.url) ? h('a', { class: 'btn', href: safeHref(pr.url), target: '_blank', rel: 'noopener noreferrer' }, icon('pr'), pr.number ? `PR #${pr.number}` : 'Pull request') : null,
+        state.readOnly ? null : h('button', { class: 'btn primary', type: 'button', dataset: { action: 'focus-composer' } }, icon('send'), 'Message'))),
     detailGrid(
-      [attentionPanel(d), composerPanel(d), nowPanel, planPanel(d), agentsPanel(d), d.lastPrompt ? panel('Your last prompt', null, h('p', { class: 'quote clamp' }, d.lastPrompt)) : null],
-      [loopPanel(d), notesPanel(d), workflowsPanel(d), teamPanel(d), linksPanel(d)],
+      [attentionPanel(d), nowPanel, planPanel(d), agentsPanel(d), composerPanel(d)],
+      [loopPanel(d), linksPanel(d), notesPanel(d), workflowsPanel(d), teamPanel(d), d.lastPrompt ? panel('Your last prompt', null, h('p', { class: 'quote clamp muted' }, d.lastPrompt)) : null],
     ),
   );
 }
@@ -940,6 +945,9 @@ async function runAction(action, el, form) {
       case 'task-delete':
         await api('DELETE', `${base}/tasks/${el.dataset.task}`);
         break;
+      case 'focus-composer':
+        focusComposer();
+        return;
       case 'cancel-edit':
         state.editing = null;
         render();
