@@ -58,6 +58,8 @@ Running several Claude Code agents at once is powerful and hard to follow. One t
 - **Activity feed.** What happened while you were away, across every session: permission prompts, finished turns, loop ticks, subagents, PRs and workflow runs, with unread markers and filters.
 - **Usage and history.** Exact token counts per day, project and model, plus recorded cost, turns and lines changed for every session.
 - **Permission alerts with sound.** The moment Claude asks to run a command or edit a file, Skipper plays a chime, shows a desktop notification and moves the session to **Needs permission**.
+- **Light on the network.** Responses are gzipped and static files are cached with ETags, which keeps phone access over Wi-Fi quick.
+- **Accessible.** Every theme meets WCAG AA contrast (checked by a test), motion respects reduced-motion settings, and status colors stay visible in Windows High Contrast.
 
 ## Usage without guesswork
 
@@ -174,8 +176,6 @@ Your sessions contain your code and prompts, so Skipper treats them that way:
 - **Nothing leaves your machine.** No telemetry, no CDN, no external requests. The UI is plain HTML, CSS and JavaScript served from the package.
 - **Loopback only by default**, with Host header checks against DNS rebinding.
 - **Writes are locked down.** They need a custom header, a JSON body and a same-origin request, and every ID and path is validated. Messages go to the `claude` CLI as an argument list, never through a shell.
-- **Light on the network.** Responses are gzipped and static files are cached with ETags, which keeps phone access over Wi-Fi quick.
-- **Accessible.** Every theme meets WCAG AA contrast (checked by a test), motion respects reduced-motion settings, and status colors stay visible in Windows High Contrast.
 - **Strict Content Security Policy.** Everything is rendered with `textContent`, never raw HTML.
 
 See [SECURITY.md](SECURITY.md) to report a vulnerability.
