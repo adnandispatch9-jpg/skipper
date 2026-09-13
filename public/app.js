@@ -539,14 +539,24 @@ const ACTIVITY_STYLE = {
   ended: ['ended', 'check'],
 };
 
-// Consecutive loop ticks of one session collapse into a single row.
+// Loop ticks of one session within the same time group collapse into one row,
+// even when several loops interleave.
 function groupActivity(items) {
   const out = [];
+  const loops = new Map();
   for (const item of items) {
-    const prev = out[out.length - 1];
-    if (prev && item.kind === 'loop' && prev.kind === 'loop' && prev.sessionId === item.sessionId) {
-      prev.count += 1;
-      prev.firstAt = item.at;
+    if (item.kind === 'loop') {
+      const key = `${item.sessionId}:${dayBucket(item.at)}`;
+      const group = loops.get(key);
+      if (group) {
+        group.count += 1;
+        group.firstAt = item.at;
+        if (!group.detail && item.detail) group.detail = item.detail;
+        continue;
+      }
+      const row = { ...item, count: 1, firstAt: item.at };
+      loops.set(key, row);
+      out.push(row);
       continue;
     }
     out.push({ ...item, count: 1, firstAt: item.at });
@@ -576,7 +586,7 @@ function renderActivity({ limit = 40 } = {}) {
       rows.push(h('div', { class: 'group-label activity-group' }, h('span', {}, b)));
     }
     const [tone, iconName] = ACTIVITY_STYLE[item.kind] || ['ended', 'check'];
-    const text = item.count > 1 ? `Loop ran ${item.count} times` : item.text;
+    const text = item.count > 1 ? `Loop ran ${item.count} times · since ${new Date(item.firstAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : item.text;
     rows.push(h('a', { class: `activity-item${item.at > state.activitySeen ? ' unread' : ''}`, href: `#/s/${item.sessionId}` },
       h('span', { class: `activity-icon tone-${tone}` }, icon(iconName)),
       h('span', { class: 'activity-body' },
