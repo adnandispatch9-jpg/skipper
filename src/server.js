@@ -88,7 +88,10 @@ export async function startServer({
   const skipperDir = dataDir ?? path.join(claudeDir, '..', '.skipper');
   const store = new Store(claudeDir, { eventsFile: eventsFile(skipperDir) });
   const settingsFile = path.join(claudeDir, 'settings.json');
-  await store.refresh();
+  // The first scan of a large history can take seconds on a busy machine. The port
+  // opens right away so the page loads; API requests wait for this scan.
+  const ready = store.refresh();
+  ready.catch(() => {});
 
   const remote = !isLoopback(host);
   const accessToken = remote ? token || crypto.randomBytes(18).toString('base64url') : null;
@@ -107,6 +110,7 @@ export async function startServer({
     pending = setTimeout(async () => {
       pending = null;
       try {
+        await ready;
         const changed = await store.refresh();
         if (changed || store.pendingAlerts.length) broadcast();
       } catch (error) {
@@ -179,6 +183,7 @@ export async function startServer({
     const method = req.method;
     const parts = url.pathname.split('/').filter(Boolean).map((p) => decodeURIComponent(p));
 
+    if (url.pathname.startsWith('/api/')) await ready;
     if (method === 'GET' || method === 'HEAD') {
       if (STATIC[url.pathname]) {
         const [file, type] = STATIC[url.pathname];
@@ -299,6 +304,7 @@ export async function startServer({
     server.once('error', reject);
     server.listen(port, host, resolve);
   });
+  await ready;
 
   const close = () =>
     new Promise((resolve) => {
