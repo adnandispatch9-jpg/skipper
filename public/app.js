@@ -1112,6 +1112,10 @@ async function openPhoneDialog() {
   const path = document.createElementNS(SVG_NS, 'path');
   path.setAttribute('d', qrPath(matrix));
   path.setAttribute('class', 'qr-dots');
+  // Inline styles win over the global icon rule (svg { stroke: currentColor }), whatever stylesheet the browser cached.
+  for (const el of [svg, bg, path]) el.style.stroke = 'none';
+  bg.style.fill = '#ffffff';
+  path.style.fill = '#111111';
   svg.append(bg, path);
   body.replaceChildren(
     h('p', { class: 'phone-note' }, 'Open Skipper on your iPhone, tap Scan the code in Skipper, and point the camera here. The phone must be on the same Wi-Fi.'),

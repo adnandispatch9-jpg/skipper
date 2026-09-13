@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:bonsoir/bonsoir.dart';
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -39,6 +40,53 @@ class PairingNotifier extends AsyncNotifier<PairingInfo?> {
       return server;
     } finally {
       client.close();
+    }
+  }
+
+  bool _relocating = false;
+
+  /// The Mac moved (new Wi-Fi address or port): find Skipper on the network again and keep the
+  /// saved token if a Mac there accepts it. Returns true when the pairing was updated.
+  Future<bool> relocate({Duration searchFor = const Duration(seconds: 6)}) async {
+    final current = state.value;
+    if (current == null || _relocating) return false;
+    _relocating = true;
+    final discovery = BonsoirDiscovery(type: '_skipper._tcp');
+    final candidates = <PairingInfo>[];
+    StreamSubscription? sub;
+    try {
+      await discovery.initialize();
+      sub = discovery.eventStream?.listen((event) {
+        switch (event) {
+          case BonsoirDiscoveryServiceFoundEvent():
+            discovery.serviceResolver.resolveService(event.service);
+          case BonsoirDiscoveryServiceResolvedEvent():
+            final host = event.service.host?.replaceFirst(RegExp(r'\.$'), '');
+            if (host != null) candidates.add(PairingInfo(host: host, port: event.service.port, token: current.token, name: current.name));
+          default:
+        }
+      });
+      await discovery.start();
+      await Future<void>.delayed(searchFor);
+      for (final candidate in candidates) {
+        if (candidate.host == current.host && candidate.port == current.port) continue;
+        final client = SkipperClient(candidate);
+        try {
+          await pair(candidate);
+          return true;
+        } catch (_) {
+          // Wrong Mac or a different token; try the next one.
+        } finally {
+          client.close();
+        }
+      }
+      return false;
+    } catch (_) {
+      return false;
+    } finally {
+      await sub?.cancel();
+      await discovery.stop();
+      _relocating = false;
     }
   }
 
@@ -155,6 +203,8 @@ class LiveNotifier extends Notifier<LiveState> {
   void _scheduleRetry(SkipperClient client) {
     if (_paused) return;
     _failures++;
+    // After a couple of failed attempts, check whether the Mac is simply somewhere else on the Wi-Fi now.
+    if (_failures == 2 || _failures % 6 == 0) ref.read(pairingProvider.notifier).relocate();
     state = state.copyWith(status: LinkStatus.offline);
     final seconds = [1, 2, 5, 10, 20, 30][(_failures - 1).clamp(0, 5)];
     _retry?.cancel();
