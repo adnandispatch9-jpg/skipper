@@ -88,3 +88,18 @@ test('pair reset clears the saved network token', () => {
   assert.match(run(['pair', 'reset'], env).stdout, /Network token cleared/);
   assert.equal(JSON.parse(readFileSync(path.join(data, 'config.json'), 'utf8')).networkToken, null);
 });
+
+test('a log file over 1 MB is started fresh when Skipper starts', { skip: process.platform === 'win32' && 'POSIX file descriptors' }, async () => {
+  const { openSync, writeFileSync, statSync, closeSync } = await import('node:fs');
+  const { spawn } = await import('node:child_process');
+  const { env, claude } = sandbox();
+  const log = path.join(claude, '..', 'out.log');
+  writeFileSync(log, 'x'.repeat(1024 * 1024 + 10));
+  const fd = openSync(log, 'a');
+  const child = spawn(process.execPath, [bin, '--port', '0'], { env, stdio: ['ignore', fd, fd] });
+  closeSync(fd);
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline && statSync(log).size > 1024 * 1024) await new Promise((r) => setTimeout(r, 100));
+  child.kill();
+  assert.ok(statSync(log).size < 1024 * 1024, `log is still ${statSync(log).size} bytes`);
+});

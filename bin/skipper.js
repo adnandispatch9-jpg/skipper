@@ -3,7 +3,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { readFileSync, rmSync, existsSync, mkdirSync, appendFileSync } from 'node:fs';
+import { readFileSync, rmSync, existsSync, mkdirSync, appendFileSync, fstatSync, ftruncateSync } from 'node:fs';
 import { format } from 'node:util';
 import { startServer, isLoopback } from '../src/server.js';
 import { writeDemo } from '../src/demo.js';
@@ -299,6 +299,15 @@ if (!token && !isLoopback(host) && !opts.demo) {
     token = crypto.randomBytes(18).toString('base64url');
     await writeConfig(dataDir, { networkToken: token });
   }
+}
+
+// Under launchd, stdout and stderr are append-only log files that nothing rotates.
+// Start them fresh once they pass 1 MB.
+for (const fd of [1, 2]) {
+  try {
+    const stat = fstatSync(fd);
+    if (stat.isFile() && stat.size > 1024 * 1024) ftruncateSync(fd, 0);
+  } catch {}
 }
 
 let app;
