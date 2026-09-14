@@ -18,7 +18,7 @@ before(async () => {
 
 after(async () => {
   await app.close();
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 test('lists demo sessions with every live state', async () => {
@@ -327,7 +327,7 @@ test('deleted subagent transcripts are forgotten', async () => {
     assert.equal(store.subagentFiles.size, 0);
     assert.equal(store.metaCache.size, 0);
   } finally {
-    rmSync(copy, { recursive: true, force: true });
+    rmSync(copy, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 

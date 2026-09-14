@@ -148,7 +148,7 @@ if (argv[0] === '-p') {
   } finally {
     delete process.env.FAKE_TARGET;
     await app.close();
-    if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+    if (existsSync(dir)) rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
@@ -170,7 +170,7 @@ test('phones authenticate with a bearer token; the agent key only works from loo
     assert.equal(await asPhone('/api/sessions', { 'x-skipper-agent-key': 'guess' }), 401);
   } finally {
     await remote.close();
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
@@ -228,7 +228,7 @@ test('the pairing code is only handed to the Mac itself', async () => {
   } finally {
     await local.close();
     await remote.close();
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 

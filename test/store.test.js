@@ -43,7 +43,7 @@ test('a refresh in progress never shows live sessions as ended', async () => {
     }
     await running;
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
@@ -67,7 +67,7 @@ test('a session file that briefly fails to parse keeps the session live', async 
     assert.equal(store.list().filter((s) => s.state !== 'ended').length, before);
     writeFileSync(file, original);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
@@ -96,7 +96,7 @@ test('a "needs your permission" notification right after a question is shown as 
     assert.ok(store.activity().some((i) => i.sessionId === target.id && i.kind === 'question'));
     assert.ok(!store.activity().some((i) => i.sessionId === target.id && i.kind === 'permission' && i.at === now + 500));
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
@@ -117,6 +117,6 @@ test('activity survives hook events for sessions whose transcript is not read ye
     const items = store.activity({ limit: 300 });
     assert.ok(items.some((i) => i.sessionId === ghost && i.kind === 'turn'));
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
