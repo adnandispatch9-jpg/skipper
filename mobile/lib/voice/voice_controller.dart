@@ -14,6 +14,7 @@ import '../api/client.dart';
 import '../api/models.dart';
 import '../core/format.dart';
 import '../state/providers.dart';
+import 'live_audio.dart';
 
 enum VoicePhase { idle, listening, thinking, speaking }
 
@@ -44,7 +45,7 @@ class VoiceTurn {
 }
 
 class VoiceState {
-  const VoiceState({this.phase = VoicePhase.idle, this.turns = const [], this.heard = '', this.speakAloud = true, this.micError, this.soundLevel = 0, this.language = 'auto', this.cloud = false, this.voices = const {}, this.voiceOptions = const {}});
+  const VoiceState({this.phase = VoicePhase.idle, this.turns = const [], this.heard = '', this.speakAloud = true, this.micError, this.soundLevel = 0, this.language = 'auto', this.cloud = false, this.voices = const {}, this.voiceOptions = const {}, this.live = false});
   final VoicePhase phase;
   final List<VoiceTurn> turns;
   final String heard;
@@ -64,7 +65,10 @@ class VoiceState {
   /// Voices the Mac offers, per language.
   final Map<String, List<VoiceOption>> voiceOptions;
 
-  VoiceState copyWith({VoicePhase? phase, List<VoiceTurn>? turns, String? heard, bool? speakAloud, String? micError, bool clearMicError = false, double? soundLevel, String? language, bool? cloud, Map<String, String>? voices, Map<String, List<VoiceOption>>? voiceOptions}) => VoiceState(
+  /// Hands-free conversation: the microphone stays open, and talking over Skipper interrupts it.
+  final bool live;
+
+  VoiceState copyWith({VoicePhase? phase, List<VoiceTurn>? turns, String? heard, bool? speakAloud, String? micError, bool clearMicError = false, double? soundLevel, String? language, bool? cloud, Map<String, String>? voices, Map<String, List<VoiceOption>>? voiceOptions, bool? live}) => VoiceState(
         phase: phase ?? this.phase,
         turns: turns ?? this.turns,
         heard: heard ?? this.heard,
@@ -75,6 +79,7 @@ class VoiceState {
         cloud: cloud ?? this.cloud,
         voices: voices ?? this.voices,
         voiceOptions: voiceOptions ?? this.voiceOptions,
+        live: live ?? this.live,
       );
 }
 
@@ -110,6 +115,16 @@ class VoiceController extends Notifier<VoiceState> {
   bool _speaking = false;
   String? _conversationId;
   StreamSubscription? _answer;
+  StreamSubscription<Uint8List>? _mic;
+  final _vad = VoiceActivityDetector();
+  Future<void> _utterances = Future.value();
+  String _spokenLanguage = 'en-US';
+  DateTime _levelShownAt = DateTime(0);
+
+  bool get _live => state.live;
+
+  /// Where the conversation rests between turns.
+  VoicePhase get _rest => _live ? VoicePhase.listening : VoicePhase.idle;
 
   static const _speakKey = 'skipper.voice.speak';
   static const _languageKey = 'skipper.voice.language';
@@ -119,6 +134,7 @@ class VoiceController extends Notifier<VoiceState> {
   VoiceState build() {
     ref.onDispose(() {
       _answer?.cancel();
+      _mic?.cancel();
       _amplitude?.cancel();
       _speech.cancel();
       _tts.stop();
@@ -339,15 +355,15 @@ class VoiceController extends Notifier<VoiceState> {
             if (rest.isNotEmpty) _speak(rest);
             final sessions = ref.read(liveProvider).sessions;
             update((t) => t.copyWith(clearStatus: true, sessionIds: mentionedSessions(t.text, sessions)));
-            if (!_speaking && _queue.isEmpty) state = state.copyWith(phase: VoicePhase.idle);
+            if (!_speaking && _queue.isEmpty) state = state.copyWith(phase: _rest);
           case 'error':
             update((t) => t.copyWith(clearStatus: true, error: data['message'] as String? ?? 'Something went wrong.'));
-            state = state.copyWith(phase: VoicePhase.idle);
+            state = state.copyWith(phase: _rest);
         }
       },
       onError: (Object error) {
         update((t) => t.copyWith(clearStatus: true, error: error is SkipperException ? error.message : 'Lost the connection to your Mac.'));
-        state = state.copyWith(phase: VoicePhase.idle);
+        state = state.copyWith(phase: _rest);
       },
     );
   }
@@ -380,15 +396,15 @@ class VoiceController extends Notifier<VoiceState> {
       }
     }
     _speaking = false;
-    if (state.phase == VoicePhase.speaking) state = state.copyWith(phase: VoicePhase.idle);
+    if (state.phase == VoicePhase.speaking) state = state.copyWith(phase: _rest);
   }
 
   Future<void> stopSpeaking() async {
     _queue.clear();
     _speaking = false;
     await _player.stop();
-    await _tts.stop();
-    if (state.phase == VoicePhase.speaking) state = state.copyWith(phase: VoicePhase.idle);
+    if (!_live) await _tts.stop();
+    if (state.phase == VoicePhase.speaking) state = state.copyWith(phase: _rest);
   }
 
   void _setProposal(String id, String status) {
@@ -401,16 +417,152 @@ class VoiceController extends Notifier<VoiceState> {
     final client = ref.read(clientProvider);
     if (client == null) return;
     _setProposal(proposal.id, 'sending');
+    final target = ref.read(liveProvider).sessions.where((s) => s.id == proposal.sessionId).firstOrNull?.title;
+    if (_live) _say(livePhrase('sending', _spokenLanguage));
     try {
+      // Delivery can take a while; the conversation carries on meanwhile.
       await client.confirmProposal(proposal.id);
       _setProposal(proposal.id, 'sent');
       HapticFeedback.mediumImpact();
+      if (_live) _say(livePhrase('sent', _spokenLanguage, target: target));
     } catch (_) {
       _setProposal(proposal.id, 'failed');
+      if (_live) _say(livePhrase('failed', _spokenLanguage));
     }
   }
 
   void cancel(Proposal proposal) => _setProposal(proposal.id, 'cancelled');
+
+  /// Something Skipper says on its own, outside an answer.
+  void _say(String text) {
+    if (text.isEmpty) return;
+    _speak(text);
+  }
+
+  // ---- Live mode ----
+
+  /// Live mode needs the Mac's recognizer, which hears both languages from a continuous stream.
+  bool get canGoLive => state.cloud;
+
+  /// The mic button: a hands-free conversation when the Mac can hear it, otherwise one question.
+  Future<void> talk() async {
+    await _refreshCloud();
+    return state.cloud ? startLive() : startListening();
+  }
+
+  Future<void> startLive() async {
+    if (_live) return;
+    await stopSpeaking();
+    await cancelListening();
+    await _refreshCloud();
+    if (!state.cloud) {
+      state = state.copyWith(micError: 'Hands-free needs voice set up on your Mac. Tap the mic to talk instead.');
+      return;
+    }
+    if (!await _recorder.hasPermission()) {
+      state = state.copyWith(micError: 'Allow the microphone for Skipper in Settings.');
+      return;
+    }
+    final Stream<Uint8List> stream;
+    try {
+      // Streaming is what turns on the iPhone's echo cancellation, so Skipper does not hear itself.
+      stream = await _recorder.startStream(const RecordConfig(
+        encoder: AudioEncoder.pcm16bits,
+        sampleRate: 16000,
+        numChannels: 1,
+        echoCancel: true,
+        noiseSuppress: true,
+        iosConfig: IosRecordConfig(categoryOptions: [IosAudioCategoryOption.defaultToSpeaker, IosAudioCategoryOption.allowBluetooth]),
+      ));
+    } catch (e) {
+      state = state.copyWith(micError: 'Could not open the microphone.');
+      return;
+    }
+    _vad.reset();
+    HapticFeedback.mediumImpact();
+    state = state.copyWith(live: true, phase: VoicePhase.listening, heard: '', clearMicError: true);
+    _mic = stream.listen(_onMic, onError: (_) => stopLive(error: 'The microphone stopped.'), onDone: () {
+      if (_live) stopLive();
+    });
+  }
+
+  Future<void> stopLive({String? error}) async {
+    if (!_live) return;
+    state = state.copyWith(live: false, phase: VoicePhase.idle, heard: '', soundLevel: 0, micError: error);
+    await _mic?.cancel();
+    _mic = null;
+    _vad.reset();
+    try {
+      if (await _recorder.isRecording()) await _recorder.stop();
+    } catch (_) {}
+  }
+
+  void _onMic(Uint8List chunk) {
+    if (!_live) return;
+    _vad.strict = _speaking;
+    for (final event in _vad.add(chunk)) {
+      switch (event) {
+        case SpeechStarted():
+          if (_speaking) {
+            // The user talked over Skipper: stop, and drop the rest of that answer.
+            stopSpeaking();
+            _answer?.cancel();
+            _clearThinking();
+            HapticFeedback.selectionClick();
+          }
+          state = state.copyWith(phase: VoicePhase.listening, heard: '');
+        case SpeechEnded(:final pcm):
+          _utterances = _utterances.then((_) => _handleUtterance(pcm));
+      }
+    }
+    final now = DateTime.now();
+    if (now.difference(_levelShownAt) > const Duration(milliseconds: 90)) {
+      _levelShownAt = now;
+      state = state.copyWith(soundLevel: _vad.levelDb);
+    }
+  }
+
+  void _clearThinking() {
+    state = state.copyWith(turns: [for (final t in state.turns) t.status != null ? t.copyWith(clearStatus: true) : t]);
+  }
+
+  Future<void> _handleUtterance(Uint8List pcm) async {
+    if (!_live || pcmDuration(pcm) < const Duration(milliseconds: 350)) return;
+    final client = ref.read(clientProvider);
+    if (client == null) return;
+    state = state.copyWith(phase: VoicePhase.thinking, heard: 'Recognizing…');
+    final ({String text, String language}) result;
+    try {
+      result = await client.transcribe(pcm16ToWav(pcm), language: state.language == 'auto' ? null : state.language);
+    } on SkipperException catch (e) {
+      if (_live) state = state.copyWith(phase: VoicePhase.listening, heard: '', micError: e.message);
+      return;
+    }
+    if (!_live) return;
+    final text = result.text.trim();
+    if (text.isEmpty) {
+      if (state.phase == VoicePhase.thinking) state = state.copyWith(phase: VoicePhase.listening, heard: '');
+      return;
+    }
+    _spokenLanguage = result.language;
+    state = state.copyWith(heard: '', clearMicError: true);
+
+    final pending = [for (final t in state.turns) ...t.proposals].where((p) => p.status == 'pending').lastOrNull;
+    if (pending != null) {
+      final intent = classifyReply(text);
+      if (intent != ReplyIntent.other) {
+        state = state.copyWith(turns: [...state.turns, VoiceTurn(role: 'user', text: text)], phase: VoicePhase.listening);
+        if (intent == ReplyIntent.yes) {
+          confirm(pending);
+        } else {
+          cancel(pending);
+          _say(livePhrase('cancelled', _spokenLanguage));
+        }
+        return;
+      }
+    }
+    ask(text);
+  }
 
   void newConversation() {
     _answer?.cancel();

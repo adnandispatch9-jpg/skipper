@@ -30,7 +30,7 @@ class _VoiceScreenState extends ConsumerState<VoiceScreen> {
       if (widget.askOnOpen != null) {
         voice.ask(widget.askOnOpen!);
       } else if (widget.listenOnOpen) {
-        voice.startListening();
+        voice.talk();
       }
     });
   }
@@ -59,6 +59,7 @@ class _VoiceScreenState extends ConsumerState<VoiceScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(icon: const Icon(Icons.close_rounded), tooltip: 'Close', onPressed: () {
+          controller.stopLive();
           controller.cancelListening();
           controller.stopSpeaking();
           Navigator.of(context).pop();
@@ -178,6 +179,7 @@ class _ProposalCard extends ConsumerWidget {
     final c = context.colors;
     final controller = ref.read(voiceProvider.notifier);
     final readOnly = ref.watch(liveProvider.select((s) => s.readOnly));
+    final handsFree = ref.watch(voiceProvider.select((v) => v.live));
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: SurfaceCard(
@@ -186,6 +188,8 @@ class _ProposalCard extends ConsumerWidget {
           Text('SEND TO ${(title ?? 'SESSION').toUpperCase()}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.7, color: c.accent)),
           const SizedBox(height: 8),
           Text('“${proposal.text}”', style: const TextStyle(height: 1.45)),
+          if (handsFree && proposal.status == 'pending' && !readOnly)
+            Padding(padding: const EdgeInsets.only(top: 8), child: Text('Say “yes” to send it or “no” to cancel.', style: TextStyle(color: c.muted, fontSize: 13))),
           const SizedBox(height: 12),
           switch (proposal.status) {
             'pending' when !readOnly => Row(children: [
@@ -224,7 +228,14 @@ class _Controls extends ConsumerWidget {
     final c = context.colors;
     final controller = ref.read(voiceProvider.notifier);
     final listening = voice.phase == VoicePhase.listening;
-    final caption = switch (voice.phase) {
+    final caption = voice.live
+        ? switch (voice.phase) {
+            VoicePhase.listening => voice.micError ?? 'Listening. Just talk.',
+            VoicePhase.thinking => voice.heard.isNotEmpty ? voice.heard : 'Thinking…',
+            VoicePhase.speaking => 'Talk any time to interrupt',
+            VoicePhase.idle => 'Listening. Just talk.',
+          }
+        : switch (voice.phase) {
       VoicePhase.listening => voice.heard.isEmpty ? 'Listening…' : '“${voice.heard}”',
       VoicePhase.thinking => 'Looking at your sessions…',
       VoicePhase.speaking => 'Tap to stop',
@@ -259,28 +270,40 @@ class _Controls extends ConsumerWidget {
           const SizedBox(width: 22),
           Semantics(
             button: true,
-            label: listening ? 'Send what you said' : 'Talk to Skipper',
+            label: voice.live ? 'End the conversation' : (listening ? 'Send what you said' : 'Talk to Skipper'),
             child: GestureDetector(
               onTap: () {
+                if (voice.live) {
+                  controller.stopLive();
+                  controller.stopSpeaking();
+                  return;
+                }
                 switch (voice.phase) {
                   case VoicePhase.listening:
                     controller.stopListening();
                   case VoicePhase.speaking:
                     controller.stopSpeaking();
                   case _:
-                    controller.startListening();
+                    controller.talk();
                 }
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
-                width: listening ? 132 : 76,
+                width: listening || voice.live ? 132 : 76,
                 height: 72,
                 decoration: BoxDecoration(
-                  color: listening ? c.accentSoft : c.accent,
+                  color: listening || voice.live ? c.accentSoft : c.accent,
                   borderRadius: BorderRadius.circular(36),
                   boxShadow: [BoxShadow(color: c.accent.withValues(alpha: listening ? 0.18 : 0.3), spreadRadius: listening ? 8 : 0, blurRadius: listening ? 0 : 20)],
                 ),
-                child: listening
+                child: voice.live
+                    ? Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        if (voice.phase == VoicePhase.listening) Expanded(child: _Waveform(level: voice.soundLevel, color: c.accent)),
+                        if (voice.phase == VoicePhase.thinking) Icon(Icons.more_horiz_rounded, size: 32, color: c.accent),
+                        if (voice.phase == VoicePhase.speaking) Icon(Icons.graphic_eq_rounded, size: 32, color: c.accent),
+                        if (voice.phase == VoicePhase.idle) Icon(Icons.mic_rounded, size: 32, color: c.accent),
+                      ])
+                    : listening
                     ? _Waveform(level: voice.soundLevel, color: c.accent)
                     : Icon(
                         voice.phase == VoicePhase.speaking ? Icons.stop_rounded : (voice.phase == VoicePhase.thinking ? Icons.more_horiz_rounded : Icons.mic_rounded),
@@ -291,7 +314,8 @@ class _Controls extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 22),
-          _RoundButton(icon: Icons.close_rounded, label: 'Cancel', onTap: () {
+          _RoundButton(icon: voice.live ? Icons.call_end_rounded : Icons.close_rounded, label: voice.live ? 'End the conversation' : 'Cancel', onTap: () {
+            controller.stopLive();
             controller.cancelListening();
             controller.stopSpeaking();
           }),
