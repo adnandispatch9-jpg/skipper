@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed: messages to an open session (including ones confirmed from the phone) started a separate background session that stalled on a trust prompt, and the open session never saw them. Open sessions now receive messages through session-to-session messaging; closed sessions resume from the directory they started in.
+- Hands-free voice on the phone: one tap starts a conversation that keeps listening, interrupting by talking stops the answer, and saying yes or no (English or Uzbek) sends or cancels a drafted message.
 - Mark a "Your turn" session as seen and it stops counting toward Needs you, the tab title and the tab icon until it does something new. Permission prompts cannot be dismissed.
 - iPhone app (Flutter, in `mobile/`) with QR pairing from the dashboard and a voice assistant for questions about your sessions, in English or Uzbek. Messages it drafts are only sent after you confirm.
 - Optional voice: free local recognition with Whisper and spoken answers through edge-tts, or Azure AI Speech.

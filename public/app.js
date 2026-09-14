@@ -834,8 +834,8 @@ function renderTabbar() {
 function composerPanel(d) {
   if (state.readOnly) return null;
   const terminal = d.live && !d.background;
-  const note = terminal ? 'Open in a terminal · sends to a background copy' : d.live ? 'Background session · claude attach to watch it' : 'Continues in the background · claude attach to open';
-  return h('section', { class: `composer-dock${terminal ? ' warn' : ''}`, id: 'composer' },
+  const note = terminal ? 'Open in a terminal · arrives in that session' : d.live ? 'Background session · claude attach to watch it' : 'Continues in the background · claude attach to open';
+  return h('section', { class: 'composer-dock', id: 'composer' },
     h('form', { dataset: { action: 'message-send' } },
       h('textarea', { name: 'message', rows: '2', maxlength: '20000', placeholder: d.state === 'waiting' ? 'Answer Claude or give the next instruction…' : 'Tell Claude what to do next…', 'aria-label': 'Message to Claude', dataset: { draft: 'message' } }, state.drafts.message[d.id] || ''),
       h('div', { class: 'composer-foot' },

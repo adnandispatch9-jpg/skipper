@@ -71,7 +71,7 @@ Exact token counts from every response, including subagents, per day, project an
 
 <img src="docs/screenshots/session-light.png" alt="Session page: what Claude is doing now, the running tool, the plan, subagents and notes" width="100%">
 
-- **Message Claude.** Type the next instruction and Skipper hands it to the official CLI (`claude --bg --resume <session>`), so the session continues in the background. Attach any time with `claude attach`.
+- **Message Claude.** Type the next instruction. A session that is open (in a terminal or in the background) receives it through Claude Code's session-to-session messaging, so it lands in that conversation. A closed session is continued in the background with `claude --bg --resume <session>` from the directory it started in; attach any time with `claude attach`.
 - **Edit tasks.** Add, rename, complete and delete tasks in a session's task list. Deleting a task that still blocks others is refused.
 - **Private notes.** Keep notes per session, and send one to Claude when you are ready.
 - **Read-only when you want it.** Start with `--read-only` and every write is switched off.
@@ -104,7 +104,7 @@ Skipper prints a link with an access token for every network address. Open it on
 
 To keep it reachable in the background, install the service with `skipper service install --host 0.0.0.0`.
 
-**iPhone app.** The Flutter app in [`mobile/`](mobile/) pairs by scanning the QR code from the dashboard's phone button, and adds a voice assistant that answers questions about your sessions in English or Uzbek. Nothing it drafts is sent to a session until you confirm. Voice is optional. Skipper uses free local voice automatically when `whisper-cli` (whisper.cpp), the `ggml-large-v3-turbo-q5_0.bin` model in `~/.skipper/models` and `edge-tts` in `~/.skipper/voice-venv` are installed; otherwise run `skipper voice setup --region <azure-region>` for Azure AI Speech.
+**iPhone app.** The Flutter app in [`mobile/`](mobile/) pairs by scanning the QR code from the dashboard's phone button, and adds a hands-free voice assistant for your sessions in English or Uzbek. Tap the mic once and talk: it listens continuously, answers aloud, and stops as soon as you talk over it. Nothing it drafts is sent to a session until you say yes (or tap Send). Voice is optional. Skipper uses free local voice automatically when `whisper-cli` (whisper.cpp), the `ggml-large-v3-turbo-q5_0.bin` model in `~/.skipper/models` and `edge-tts` in `~/.skipper/voice-venv` are installed; otherwise run `skipper voice setup --region <azure-region>` for Azure AI Speech.
 
 ## Never miss a permission prompt
 
@@ -186,8 +186,8 @@ See [SECURITY.md](SECURITY.md) to report a vulnerability.
 
 ## FAQ
 
-**Can Skipper type into a Claude Code terminal that is already open?**
-No. Claude Code has no public API for that. Messaging an open session starts a background copy that continues from the same conversation, and Skipper warns you before you send. For finished or idle-and-closed sessions, the message continues the session itself.
+**Can Skipper send to a Claude Code terminal that is already open?**
+Yes. Open sessions receive the message through Claude Code's own session-to-session messaging, the same way one session messages another, and it shows up in that terminal's conversation. Delivery takes about ten seconds. For closed sessions, the message continues the session itself in the background.
 
 **Does it work with agent teams, worktrees and background agents?**
 Yes. Team task lists, owners, worktree branches and background subagents all show up.
