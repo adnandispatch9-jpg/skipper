@@ -117,7 +117,7 @@ if (argv[0] === '-p') {
     const { sessions } = await (await fetch(`${url}/api/sessions`)).json();
     const target = sessions.find((s) => s.title === 'Fix flaky webhook retries');
     process.env.FAKE_TARGET = target.id;
-    for (const entry of app.store.files.values()) if (entry.summary.id === target.id) mkdirSync(entry.summary.cwd = path.join(dir, 'work'), { recursive: true });
+    for (const entry of app.store.files.values()) if (entry.summary.id === target.id) mkdirSync(entry.summary.startCwd = entry.summary.cwd = path.join(dir, 'work'), { recursive: true });
 
     assert.equal((await fetch(`${url}/api/agent/ask`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"text":"hi"}' })).status, 403);
     assert.equal((await post('/api/agent/ask', { text: '' })).status, 400);

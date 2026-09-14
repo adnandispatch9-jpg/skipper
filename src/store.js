@@ -299,6 +299,9 @@ export class Store {
         entrypoint: info.entrypoint || null,
         startedAt: info.startedAt || null,
         status: typeof info.status === 'string' ? info.status : null,
+        // The name other sessions use to message this one, and the directory it runs in.
+        peerName: typeof info.name === 'string' && info.name ? info.name : null,
+        cwd: typeof info.cwd === 'string' ? info.cwd : null,
       });
     }
     this.live = live;
@@ -581,6 +584,8 @@ export class Store {
       permissionMode: s.permissionMode,
       pid: live?.pid ?? null,
       entrypoint: live?.entrypoint ?? null,
+      peerName: live?.peerName ?? null,
+      resumeCwd: live?.cwd || s.startCwd || s.cwd,
       turns: s.turns,
       firstPrompt: s.firstPrompt,
       lastPrompt: s.lastPrompt,

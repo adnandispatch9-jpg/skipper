@@ -8,6 +8,7 @@ export function createSummary(sessionId) {
   return {
     id: sessionId,
     cwd: null,
+    startCwd: null, // where the session was started; `claude --resume` only finds it from there
     cwdCounts: new Map(), // the directory a session mostly works in names its project
     gitBranch: null,
     version: null,
@@ -206,6 +207,7 @@ export function applyRecord(s, record) {
     if (s.updatedAt == null || at > s.updatedAt) s.updatedAt = at;
   }
   if (record.cwd) {
+    if (!s.startCwd) s.startCwd = record.cwd;
     const count = (s.cwdCounts.get(record.cwd) || 0) + 1;
     s.cwdCounts.set(record.cwd, count);
     if (!s.cwd || count > (s.cwdCounts.get(s.cwd) || 0)) s.cwd = record.cwd;

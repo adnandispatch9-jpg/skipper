@@ -71,10 +71,10 @@ class SkipperClient {
 
   Future<Map<String, String>> _writeHeaders() async => {..._headers, 'Content-Type': 'application/json', 'X-Skipper': '1'};
 
-  Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body, {Duration timeout = const Duration(seconds: 30)}) async {
     try {
       final headers = await _writeHeaders();
-      final res = await _retry(() => _http.post(_uri(path), headers: headers, body: jsonEncode(body)).timeout(const Duration(seconds: 30)));
+      final res = await _retry(() => _http.post(_uri(path), headers: headers, body: jsonEncode(body)).timeout(timeout));
       return _decode(res);
     } on SkipperException {
       rethrow;
@@ -106,7 +106,7 @@ class SkipperClient {
     return [for (final i in (json['items'] as List? ?? const [])) ?ActivityItem.fromJson(i)];
   }
 
-  Future<void> sendMessage(String sessionId, String message) => _post('/api/sessions/$sessionId/message', {'message': message});
+  Future<void> sendMessage(String sessionId, String message) => _post('/api/sessions/$sessionId/message', {'message': message}, timeout: _deliveryTimeout);
 
   Future<void> addNote(String sessionId, String text) => _post('/api/sessions/$sessionId/notes', {'text': text});
 
@@ -139,7 +139,10 @@ class SkipperClient {
     return res.bodyBytes;
   }
 
-  Future<void> confirmProposal(String proposalId) => _post('/api/agent/confirm', {'proposalId': proposalId});
+  // Delivering to an open session goes through Claude Code on the Mac and can take 10-20 seconds.
+  static const _deliveryTimeout = Duration(seconds: 100);
+
+  Future<void> confirmProposal(String proposalId) => _post('/api/agent/confirm', {'proposalId': proposalId}, timeout: _deliveryTimeout);
 
   /// Live change and alert events. The stream ends when the connection drops.
   Stream<SseEvent> events() async* {

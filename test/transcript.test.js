@@ -93,3 +93,11 @@ test('multiple-choice questions are remembered so their notifications read as qu
   const s = fold([tool('AskUserQuestion', { questions: [] }, 'q1', 3), tool('Bash', { command: 'ls' }, 'b1', 4)]);
   assert.deepEqual(s.askedAt, [Date.parse(at(3))]);
 });
+
+test('remembers the directory a session started in even after it mostly works elsewhere', () => {
+  const s = createSummary('00000000-0000-4000-8000-000000000001');
+  applyRecord(s, { cwd: '/home/me', timestamp: '2026-01-01T00:00:00Z' });
+  for (let i = 0; i < 3; i++) applyRecord(s, { cwd: '/home/me/app', timestamp: '2026-01-01T00:01:00Z' });
+  assert.equal(s.startCwd, '/home/me');
+  assert.equal(s.cwd, '/home/me/app');
+});
