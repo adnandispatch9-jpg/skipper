@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Mark a "Your turn" session as seen and it stops counting toward Needs you, the tab title and the tab icon until it does something new. Permission prompts cannot be dismissed.
 - iPhone app (Flutter, in `mobile/`) with QR pairing from the dashboard and a voice assistant for questions about your sessions, in English or Uzbek. Messages it drafts are only sent after you confirm.
 - Optional voice: free local recognition with Whisper and spoken answers through edge-tts, or Azure AI Speech.
 - The network access token persists across restarts; `skipper pair reset` issues a new one. `skipper service install --host 0.0.0.0` runs the service on your Wi-Fi.

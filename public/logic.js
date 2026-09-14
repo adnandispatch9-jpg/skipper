@@ -163,3 +163,9 @@ function qrPath(matrix, quiet = 4) {
   });
   return d;
 }
+
+// A session needs you when it asks for permission, or waits for you and you have not
+// marked it seen since its last activity. Permission prompts can never be dismissed.
+function needsYou(session, seen = {}) {
+  return session.state === 'permission' || (session.state === 'waiting' && !(seen[session.id] >= session.updatedAt));
+}

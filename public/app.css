@@ -520,6 +520,12 @@ button.box:hover { border-color: var(--accent); }
 .queue-meta .meta { font-size: 12.5px; color: var(--faint); }
 .queue-action { display: flex; align-items: center; gap: 10px; }
 .queue-action .hint { white-space: nowrap; }
+.queue-item { position: relative; border-top: 1px solid var(--border); }
+.queue-item:first-child { border-top: 0; }
+.queue-item .queue-row { border-top: 0; padding-right: 58px; }
+.queue-item .seen-btn { position: absolute; top: 50%; right: 14px; transform: translateY(-50%); }
+.queue-item.seen .queue-row { opacity: .6; }
+.seen-toggle { margin-top: 10px; }
 
 .card.flight { gap: 12px; }
 .card.flight.waiting { border-left: 1px solid var(--border); }

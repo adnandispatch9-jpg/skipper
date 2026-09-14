@@ -135,6 +135,12 @@ const store = {
   set(key, value) { try { localStorage.setItem(key, value); } catch {} },
 };
 
+// Sessions you marked as seen while they waited for you, keyed by id with the
+// updatedAt they had. Any new activity brings them back.
+function seenMap() {
+  try { return JSON.parse(store.get('skipper.seen') || '{}') || {}; } catch { return {}; }
+}
+
 /* ---------- data ---------- */
 
 async function getJson(url) {
@@ -360,8 +366,9 @@ function visibleSessions() {
 function renderPulse() {
   const counts = { permission: 0, waiting: 0, working: 0, sleeping: 0 };
   let agents = 0;
+  const seen = seenMap();
   for (const s of state.sessions) {
-    if (counts[s.state] != null) counts[s.state]++;
+    if (counts[s.state] != null && (s.state !== 'waiting' || needsYou(s, seen))) counts[s.state]++;
     agents += s.agentsRunning;
   }
   const needsCount = counts.waiting + counts.permission;
@@ -386,7 +393,7 @@ const URGENCY = { permission: 0, waiting: 1, working: 2, sleeping: 3, ended: 4 }
 
 function renderRail() {
   const live = state.sessions.filter((s) => s.live);
-  const needs = live.filter((s) => s.state === 'permission' || s.state === 'waiting').length;
+  const needs = live.filter((s) => needsYou(s, seenMap())).length;
   const tab = (id, label, count, dot) =>
     h('button', { type: 'button', role: 'tab', class: 'rail-tab', 'aria-selected': String(state.filter === id), dataset: { filter: id } },
       h('i', { class: `dot ${dot}` }), h('span', {}, label), h('b', { class: needs && id === 'live' ? 'hot' : '' }, count));
@@ -483,6 +490,14 @@ function metaItem(iconName, text, cls = '') {
 
 function queueRow(s) {
   const permission = s.state === 'permission';
+  const row = queueLink(s, permission);
+  if (permission) return row;
+  const seen = !needsYou(s, seenMap());
+  return h('div', { class: `queue-item${seen ? ' seen' : ''}` }, row,
+    h('button', { class: 'icon-btn tiny seen-btn', type: 'button', title: seen ? 'Show as needing you' : 'Mark as seen until it changes', 'aria-label': seen ? `Show ${s.title} as needing you` : `Mark ${s.title} as seen`, dataset: { action: 'mark-seen', id: s.id, at: String(s.updatedAt), undo: seen ? '1' : '' } }, icon(seen ? 'reply' : 'close')));
+}
+
+function queueLink(s, permission) {
   const ask = s.attention?.message || '';
   const command = ask.match(/:\s*(.+)$/)?.[1];
   return h('a', { class: `queue-row ${s.state}`, href: permission ? `#/s/${s.id}` : `#/s/${s.id}/reply` },
@@ -673,7 +688,8 @@ function renderOverview() {
     );
   }
   const live = state.sessions.filter((s) => s.live && matches(s));
-  const queue = live.filter((s) => s.state === 'permission' || s.state === 'waiting')
+  const seenQueue = live.filter((s) => s.state === 'waiting' && !needsYou(s, seenMap()));
+  const queue = live.filter((s) => needsYou(s, seenMap()) || (state.showSeen && s.state === 'waiting'))
     .sort((a, b) => (a.state === 'permission' ? 0 : 1) - (b.state === 'permission' ? 0 : 1) || b.updatedAt - a.updatedAt);
   const flight = live.filter((s) => s.state === 'working' || s.state === 'sleeping')
     .sort((a, b) => (a.state === 'working' ? 0 : 1) - (b.state === 'working' ? 0 : 1) || b.updatedAt - a.updatedAt);
@@ -697,6 +713,9 @@ function renderOverview() {
     queue.length ? h('section', { class: 'section' },
       h('h2', {}, 'Needs you'),
       h('div', { class: 'queue' }, queue.map(queueRow)),
+      seenQueue.length ? h('button', { class: 'link-btn seen-toggle', type: 'button', dataset: { action: 'toggle-seen' } }, state.showSeen ? 'Hide sessions you have seen' : `${seenQueue.length} seen session${seenQueue.length > 1 ? 's' : ''} hidden · Show`) : null,
+    ) : seenQueue.length ? h('section', { class: 'section' },
+      h('button', { class: 'link-btn seen-toggle', type: 'button', dataset: { action: 'toggle-seen' } }, `${seenQueue.length} seen session${seenQueue.length > 1 ? 's' : ''} waiting · Show`),
     ) : null,
     h('section', { class: 'section' },
       h('h2', {}, 'In flight'),
@@ -797,7 +816,7 @@ function attentionPanel(d) {
 function renderTabbar() {
   const r = route();
   const live = state.sessions.filter((s) => s.live);
-  const needs = live.filter((s) => s.state === 'permission' || s.state === 'waiting').length;
+  const needs = live.filter((s) => needsYou(s, seenMap())).length;
   const active = r.name === 'overview' ? 'needs' : r.name === 'activity' ? 'activity' : r.name === 'list' ? state.filter : null;
   const tab = (id, href, label, badge, dot) =>
     h('a', { class: 'tab', href, 'aria-current': active === id ? 'page' : null, dataset: { tab: id } },
@@ -1135,7 +1154,7 @@ const TASK_NEXT = { pending: 'in_progress', in_progress: 'completed', completed:
 
 async function runAction(action, el, form) {
   const d = state.detail;
-  if (!d && !['copy', 'dismiss-tip'].includes(action)) return;
+  if (!d && !['copy', 'dismiss-tip', 'mark-seen', 'toggle-seen'].includes(action)) return;
   const base = d ? `/api/sessions/${d.id}` : '';
   const value = (name) => form?.elements[name]?.value ?? '';
   try {
@@ -1227,6 +1246,21 @@ async function runAction(action, el, form) {
         toast(copied ? el.dataset.copied || 'Command copied' : 'Copy is not available here. Select the command instead.', copied ? '' : 'error');
         return;
       }
+      case 'mark-seen': {
+        const seen = seenMap();
+        if (el.dataset.undo) delete seen[el.dataset.id];
+        else seen[el.dataset.id] = Number(el.dataset.at);
+        // Forget entries for sessions that are gone so the map stays small.
+        const ids = new Set(state.sessions.map((x) => x.id));
+        for (const id of Object.keys(seen)) if (!ids.has(id)) delete seen[id];
+        store.set('skipper.seen', JSON.stringify(seen));
+        render();
+        return;
+      }
+      case 'toggle-seen':
+        state.showSeen = !state.showSeen;
+        render();
+        return;
       case 'dismiss-tip':
         store.set(`skipper.tip.${el.dataset.tip}`, '1');
         render();

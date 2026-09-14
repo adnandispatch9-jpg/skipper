@@ -32,7 +32,7 @@ test('index.html references only elements app.js expects', () => {
 
 const helpers = (() => {
   const context = {};
-  vm.runInNewContext(`${logic}\n;globalThis.out = { quietReason, formatTokens, niceScale, nextTheme, resumeCommand, formatAgo, formatCountdown, duration, safeHref, toolName, plain, splitAsk, dayBucketAt, groupActivity, faviconHref };`, context);
+  vm.runInNewContext(`${logic}\n;globalThis.out = { quietReason, formatTokens, niceScale, nextTheme, resumeCommand, formatAgo, formatCountdown, duration, safeHref, toolName, plain, splitAsk, dayBucketAt, groupActivity, faviconHref, needsYou };`, context);
   return context.out;
 })();
 
@@ -151,4 +151,13 @@ test('QR codes: format bits, finder patterns and a compact SVG path', () => {
   assert.equal(m[m.length - 8][8], true, 'dark module');
   assert.throws(() => QR.encode('x'.repeat(400)), /too long/);
   assert.equal(qrPath([[true, true, false, true]], 0), 'M0 0h2v1h-2zM3 0h1v1h-1z');
+});
+
+test('seen waiting sessions stop needing you until they change; permission always needs you', () => {
+  const waiting = { id: 'a', state: 'waiting', updatedAt: 100 };
+  assert.equal(helpers.needsYou(waiting, {}), true);
+  assert.equal(helpers.needsYou(waiting, { a: 100 }), false);
+  assert.equal(helpers.needsYou({ ...waiting, updatedAt: 101 }, { a: 100 }), true);
+  assert.equal(helpers.needsYou({ id: 'a', state: 'permission', updatedAt: 1 }, { a: 100 }), true);
+  assert.equal(helpers.needsYou({ id: 'a', state: 'working', updatedAt: 1 }, {}), false);
 });
