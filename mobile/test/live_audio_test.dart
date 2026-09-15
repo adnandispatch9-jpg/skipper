@@ -72,7 +72,10 @@ void main() {
     for (final no in ['No', "no, don't send", "Yo'q", 'kerak emas', 'cancel', 'wait']) {
       expect(classifyReply(no), ReplyIntent.no, reason: no);
     }
-    for (final other in ['', 'What is the checkout session doing right now?', 'tell the docs session to stop and open a PR instead please']) {
+    for (final yes in ['Yes please', 'okay send it now', 'go ahead', 'Right.', 'ha yubor']) {
+      expect(classifyReply(yes), ReplyIntent.yes, reason: yes);
+    }
+    for (final other in ['', 'What is the checkout session doing right now?', 'tell the docs session to stop and open a PR instead please', 'okay what about Lutra', 'go to the docs session', 'is that right', 'please check the tests', 'sure but which one', 'it']) {
       expect(classifyReply(other), ReplyIntent.other, reason: other);
     }
   });

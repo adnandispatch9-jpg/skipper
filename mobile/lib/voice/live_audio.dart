@@ -173,6 +173,8 @@ const _no = {
   "yo'q", 'yoq', 'yo‘q', 'yoʻq', 'kerak emas', 'kerakmas', 'yubormang', 'yuborma', "jo'natma", 'jonatma', 'bekor', 'bekor qil', 'toʻxta', "to'xta", 'toxta', 'shoshma',
 };
 
+const _yesFillers = {'please', 'now', 'just', 'then', 'and', 'it', 'endi', 'iltimos'};
+
 /// Whether a short spoken reply accepts or declines the message Skipper just read back.
 /// Anything longer or unclear is treated as a new request.
 ReplyIntent classifyReply(String text) {
@@ -180,10 +182,16 @@ ReplyIntent classifyReply(String text) {
   if (clean.isEmpty) return ReplyIntent.other;
   final words = clean.split(' ');
   if (words.length > 5) return ReplyIntent.other;
-  bool hits(Set<String> phrases) => phrases.contains(clean) || words.any(phrases.contains) || phrases.any((p) => p.contains(' ') && clean.contains(p));
+  final hitsNo = _no.contains(clean) || words.any(_no.contains) || _no.any((p) => p.contains(' ') && ' $clean '.contains(' $p '));
   // "No, don't send" and "yes... no wait" both mean no.
-  if (hits(_no)) return ReplyIntent.no;
-  if (hits(_yes)) return ReplyIntent.yes;
+  if (hitsNo) return ReplyIntent.no;
+  // Sending is not undoable, so yes needs the whole reply to be agreement: "okay, what about Lutra?" is a new question.
+  var rest = ' $clean ';
+  for (final phrase in _yes.where((p) => p.contains(' ')).toList()..sort((a, b) => b.length - a.length)) {
+    rest = rest.replaceAll(' $phrase ', ' yes ');
+  }
+  final restWords = rest.trim().split(' ');
+  if (restWords.any(_yes.contains) && restWords.every((w) => _yes.contains(w) || _yesFillers.contains(w))) return ReplyIntent.yes;
   return ReplyIntent.other;
 }
 

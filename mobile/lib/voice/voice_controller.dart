@@ -547,7 +547,7 @@ class VoiceController extends Notifier<VoiceState> {
     _spokenLanguage = result.language;
     state = state.copyWith(heard: '', clearMicError: true);
 
-    final pending = [for (final t in state.turns) ...t.proposals].where((p) => p.status == 'pending').lastOrNull;
+    final pending = state.turns.lastOrNull?.proposals.where((p) => p.status == 'pending').lastOrNull;
     if (pending != null) {
       final intent = classifyReply(text);
       if (intent != ReplyIntent.other) {
