@@ -319,7 +319,11 @@ export async function startServer({
       const languages = LANGUAGES.includes(lang) ? [lang] : LANGUAGES;
       const audio = await readRaw(req, 4 * 1024 * 1024);
       try {
-        return json(res, 200, await transcribe(await speechConfig(skipperDir), audio, { languages }));
+        const startedAt = Date.now();
+        const result = await transcribe(await speechConfig(skipperDir), audio, { languages });
+        // Timing and language only; what was said stays out of the log.
+        log(`voice heard ${result.language}: ${Date.now() - startedAt}ms${result.text ? '' : ' (nothing)'}`);
+        return json(res, 200, result);
       } catch (error) {
         if (error instanceof SpeechError) {
           log(`voice transcribe failed: ${error.message}`);
