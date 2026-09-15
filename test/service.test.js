@@ -8,6 +8,8 @@ test('launchd plist runs skipper at login and escapes paths', () => {
   assert.match(plist, /<string>\/opt\/node &amp; co\/bin\/node<\/string>/);
   assert.match(plist, /<string>--port<\/string>\s*<string>5000<\/string>/);
   assert.match(plist, /<key>KeepAlive<\/key><true\/>/);
+  // Not throttled like background work: local voice recognition runs on the CPU and GPU.
+  assert.match(plist, /<key>ProcessType<\/key><string>Interactive<\/string>/);
   assert.match(plist, /Logs\/skipper\/err\.log/);
 });
 

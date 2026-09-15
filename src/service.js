@@ -24,6 +24,8 @@ ${args}
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
+  <!-- Without this, macOS runs agents as background work with throttled CPU and GPU, which doubles voice recognition time. -->
+  <key>ProcessType</key><string>Interactive</string>
   <key>StandardOutPath</key><string>${xml(path.posix.join(logDir, 'out.log'))}</string>
   <key>StandardErrorPath</key><string>${xml(path.posix.join(logDir, 'err.log'))}</string>
 </dict>
