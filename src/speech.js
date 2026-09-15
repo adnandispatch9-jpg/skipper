@@ -69,10 +69,36 @@ export function parseDetectedLanguage(log) {
   return /auto-detected language: (\w+)/.exec(log || '')?.[1] ?? null;
 }
 
-async function detectSpokenLanguage(config, input) {
+/** Length of a PCM WAV recording in seconds, or null if the header can't be read. */
+export function wavSeconds(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 44 || buffer.toString('ascii', 0, 4) !== 'RIFF' || buffer.toString('ascii', 8, 12) !== 'WAVE') return null;
+  let byteRate = 0;
+  for (let at = 12; at + 8 <= buffer.length; ) {
+    const id = buffer.toString('ascii', at, at + 4);
+    const size = buffer.readUInt32LE(at + 4);
+    if (id === 'fmt ' && at + 16 <= buffer.length) byteRate = buffer.readUInt32LE(at + 16);
+    if (id === 'data') return byteRate ? Math.min(size, buffer.length - at - 8) / byteRate : null;
+    at += 8 + size + (size % 2);
+  }
+  return null;
+}
+
+/**
+ * Whisper encodes a fixed 30-second window (1500 frames) however short the question is.
+ * A window sized to the recording plus a margin gives the same text two to three times faster;
+ * too tight a window drops words, so the margin is generous.
+ */
+export function audioContext(seconds, language = 'en-US') {
+  if (!Number.isFinite(seconds) || seconds <= 0) return 0; // 0 = whisper's full window
+  // Uzbek is a low-resource language for Whisper and loses words sooner, so it keeps a wider window.
+  if (language === 'uz-UZ') return Math.max(1000, Math.min(1500, Math.ceil(seconds * 100) + 400));
+  return Math.max(512, Math.min(1500, Math.ceil(seconds * 55) + 320));
+}
+
+async function detectSpokenLanguage(config, input, ctx) {
   // A small model is enough to tell English apart and takes well under a second.
   const model = config.detectModel && existsSync(config.detectModel) ? config.detectModel : config.model;
-  const result = await run(config.whisper, ['-m', model, '-l', 'auto', '-dl', '-f', input], { timeout: 30_000 }).catch((e) => ({ stdout: '', stderr: e.stderr || '' }));
+  const result = await run(config.whisper, ['-m', model, '-l', 'auto', '-dl', '-ac', String(ctx), '-f', input], { timeout: 30_000 }).catch((e) => ({ stdout: '', stderr: e.stderr || '' }));
   // Uzbek is often heard as Turkish or Kazakh; anything but English is treated as Uzbek.
   return parseDetectedLanguage(`${result.stdout}\n${result.stderr}`) === 'en' ? 'en-US' : 'uz-UZ';
 }
@@ -82,11 +108,12 @@ async function transcribeLocal(config, audio, languages) {
   try {
     const input = path.join(dir, 'question.wav');
     await fs.writeFile(input, audio);
+    const seconds = wavSeconds(audio);
     const whisper = (language, extra = []) =>
-      run(config.whisper, ['-m', config.model, '-l', language, '-nt', '-np', '-f', input, ...extra], { timeout: 90_000 });
+      run(config.whisper, ['-m', config.model, '-l', language.slice(0, 2), '-nt', '-np', '-ac', String(audioContext(seconds, language)), '-f', input, ...extra], { timeout: 90_000 });
     let language = languages.length === 1 ? languages[0] : null;
-    if (!language) language = await detectSpokenLanguage(config, input);
-    const { stdout } = language === 'uz-UZ' ? await whisper('uz', ['--prompt', WHISPER_PROMPT]) : await whisper('en');
+    if (!language) language = await detectSpokenLanguage(config, input, audioContext(seconds));
+    const { stdout } = language === 'uz-UZ' ? await whisper('uz-UZ', ['--prompt', WHISPER_PROMPT]) : await whisper('en-US');
     return { text: stdout.replace(/\s+/g, ' ').trim(), language, confidence: 0.6 };
   } catch (error) {
     if (error instanceof SpeechError) throw error;

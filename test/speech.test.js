@@ -72,6 +72,29 @@ test('Whisper language detection is read from its log', async () => {
   assert.equal(parseDetectedLanguage('nothing here'), null);
 });
 
+test('Whisper encodes a window sized to the recording, not a fixed 30 seconds', async () => {
+  const { wavSeconds, audioContext } = await import('../src/speech.js');
+  const wav = (seconds, rate = 16000) => {
+    const data = Math.round(seconds * rate) * 2;
+    const b = Buffer.alloc(44 + data);
+    b.write('RIFF', 0, 'ascii'); b.writeUInt32LE(36 + data, 4); b.write('WAVE', 8, 'ascii');
+    b.write('fmt ', 12, 'ascii'); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
+    b.writeUInt32LE(rate, 24); b.writeUInt32LE(rate * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34);
+    b.write('data', 36, 'ascii'); b.writeUInt32LE(data, 40);
+    return b;
+  };
+  assert.ok(Math.abs(wavSeconds(wav(3.7)) - 3.7) < 0.001);
+  assert.equal(wavSeconds(Buffer.from('not audio at all, clearly not a wav file header')), null);
+  // Short questions get a much smaller window, with room to spare (50 frames per second).
+  assert.ok(audioContext(3.7) < 1500 && audioContext(3.7) > 3.7 * 50 + 200);
+  assert.ok(audioContext(5.9) > 5.9 * 50 + 200);
+  assert.equal(audioContext(0.4), 512);
+  assert.equal(audioContext(45), 1500);
+  assert.equal(audioContext(null), 0);
+  // Uzbek keeps a wider window.
+  assert.ok(audioContext(5.9, 'uz-UZ') >= 1000 && audioContext(5.9, 'uz-UZ') > audioContext(5.9));
+});
+
 test('local voice passes answer text as one argument, even when it starts with a dash', { skip: process.platform === 'win32' && 'needs a POSIX executable' }, async () => {
   const os = await import('node:os');
   const path = await import('node:path');
