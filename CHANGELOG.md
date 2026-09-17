@@ -1,7 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-09-17)
 
+- Published to npm as **`skipper-cc`** (`skipper` belongs to an unrelated package). `npx skipper-cc` now works with no git clone; the command is still `skipper`.
+- Conversations say what they left out: a shortened message is marked instead of trailing off into an ellipsis, and the phone app shows how many older items were not loaded. Reported by Dominik Zborowski.
+- Fixed: a message confirmed from the phone skipped the five-per-minute rate limit that the dashboard's own message box applies. Every route that can start a `claude` process now shares one limit.
+- Fixed: `skipper service install --host 0.0.0.0` on Windows silently installed a loopback-only task, so the phone app could never reach it.
+- The README documents Windows: `skipper service install` uses Task Scheduler there, and all three platforms are covered by CI.
 - Fixed: messages to an open session (including ones confirmed from the phone) started a separate background session that stalled on a trust prompt, and the open session never saw them. Open sessions now receive messages through session-to-session messaging; closed sessions resume from the directory they started in.
 - Hands-free voice on the phone: one tap starts a conversation that keeps listening, interrupting by talking stops the answer, and saying yes or no (English or Uzbek) sends or cancels a drafted message.
 - Mark a "Your turn" session as seen and it stops counting toward Needs you, the tab title and the tab icon until it does something new. Permission prompts cannot be dismissed.

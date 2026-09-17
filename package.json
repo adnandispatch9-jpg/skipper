@@ -1,6 +1,6 @@
 {
-  "name": "skipper",
-  "version": "0.5.0",
+  "name": "skipper-cc",
+  "version": "0.6.0",
   "description": "Mission control for Claude Code: a live local dashboard for sessions, subagents, /loop, todo lists and tasks, with messaging, notes and task editing.",
   "type": "module",
   "bin": {

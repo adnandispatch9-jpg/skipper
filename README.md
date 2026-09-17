@@ -23,7 +23,7 @@
 Try it once, no install:
 
 ```bash
-npx github:bilol-makhmudov/skipper
+npx skipper-cc
 ```
 
 Then open **http://localhost:4317**. Skipper finds your sessions in `~/.claude` automatically, and new ones appear the moment they start. Add `--demo --open` for a tour with sample sessions.
@@ -31,12 +31,14 @@ Then open **http://localhost:4317**. Skipper finds your sessions in `~/.claude` 
 ### Set it up for everyday use
 
 ```bash
-npm install -g github:bilol-makhmudov/skipper
+npm install -g skipper-cc
 skipper hooks install     # chime and notify on permission prompts
 skipper service install   # keep it running in the background, start at login
 ```
 
 Requires Node.js 20 or newer. Skipper has **zero runtime dependencies**.
+
+The package is published as **`skipper-cc`** because `skipper` on npm belongs to an unrelated project. The command you run is still `skipper`.
 
 ### From source
 
@@ -153,11 +155,13 @@ System, Light, Dark, **Midnight** (true black for OLED screens), **Paper** (warm
 ### Keep it running in the background
 
 ```bash
-npm install -g github:bilol-makhmudov/skipper
+npm install -g skipper-cc
 skipper service install
 ```
 
-Skipper starts at login and restarts if it stops: a launchd agent on macOS, a systemd user service on Linux. Check it with `skipper service status` and remove it with `skipper service uninstall`.
+Skipper starts at login and restarts if it stops: a launchd agent on macOS, a systemd user service on Linux, and a Task Scheduler task on Windows. Check it with `skipper service status` and remove it with `skipper service uninstall`.
+
+To reach the dashboard from your phone, install the service with `--host 0.0.0.0`; without it the service listens on loopback only.
 
 ## How it works
 
@@ -193,7 +197,7 @@ Yes. Open sessions receive the message through Claude Code's own session-to-sess
 Yes. Team task lists, owners, worktree branches and background subagents all show up.
 
 **Windows and Linux?**
-Skipper is plain Node.js and runs anywhere Claude Code does.
+Skipper is plain Node.js and runs anywhere Claude Code does. All three platforms are covered by CI, and `skipper service install` works on each: launchd on macOS, a systemd user service on Linux, Task Scheduler on Windows.
 
 **Is this an official Anthropic product?**
 No. Skipper is an independent open-source project for people who use Claude Code.
