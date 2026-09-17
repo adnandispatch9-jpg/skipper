@@ -186,6 +186,25 @@ export async function startServer({
   const messageTimes = [];
   const tasks = new Tasks(claudeDir, store);
 
+  // Each message starts a process, so cap how often that can happen. Every route
+  // that can send one goes through here, including the phone agent's confirm.
+  function takeMessageSlot() {
+    const now = Date.now();
+    while (messageTimes.length && now - messageTimes[0] > MESSAGE_LIMIT.windowMs) messageTimes.shift();
+    if (messageTimes.length >= MESSAGE_LIMIT.count) return null;
+    messageTimes.push(now);
+    return now;
+  }
+
+  function releaseMessageSlot(slot) {
+    const index = messageTimes.indexOf(slot);
+    if (index !== -1) messageTimes.splice(index, 1);
+  }
+
+  function tooManyMessages(res) {
+    return send(res, 429, JSON.stringify({ error: 'Too many messages in a minute. Wait a moment and try again.' }), undefined, { 'Retry-After': '30' });
+  }
+
   async function readRaw(req, limit) {
     let size = 0;
     const chunks = [];
@@ -387,7 +406,15 @@ export async function startServer({
       if (!proposal) return json(res, 404, { error: 'That proposal expired. Ask again.' });
       const session = store.get(proposal.sessionId);
       if (!session) return json(res, 404, { error: 'Session not found' });
-      const result = await sendMessage({ session, message: proposal.text, claudeBin });
+      const slot = takeMessageSlot();
+      if (slot === null) return tooManyMessages(res);
+      let result;
+      try {
+        result = await sendMessage({ session, message: proposal.text, claudeBin });
+      } catch (error) {
+        if (error instanceof ActionError && error.status < 500) releaseMessageSlot(slot);
+        throw error;
+      }
       log(`agent message sent to ${session.id}`);
       return json(res, 200, result);
     }
@@ -406,18 +433,13 @@ export async function startServer({
 
     let result;
     if (kind === 'message' && method === 'POST' && itemId === undefined) {
-      // Each message starts a process, so cap how often that can happen.
-      const t = Date.now();
-      while (messageTimes.length && t - messageTimes[0] > MESSAGE_LIMIT.windowMs) messageTimes.shift();
-      if (messageTimes.length >= MESSAGE_LIMIT.count) {
-        return send(res, 429, JSON.stringify({ error: 'Too many messages in a minute. Wait a moment and try again.' }), undefined, { 'Retry-After': '30' });
-      }
-      messageTimes.push(t);
+      const slot = takeMessageSlot();
+      if (slot === null) return tooManyMessages(res);
       try {
         result = await sendMessage({ session, message: body.message, claudeBin });
       } catch (error) {
         // A rejected message (empty, too long) did not start anything; give the slot back.
-        if (error instanceof ActionError && error.status < 500) messageTimes.splice(messageTimes.indexOf(t), 1);
+        if (error instanceof ActionError && error.status < 500) releaseMessageSlot(slot);
         throw error;
       }
       log(`message sent to ${session.id}`);
