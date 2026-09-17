@@ -153,7 +153,7 @@ if (argv[0] === 'voice') {
     console.log(`${name}: ${file ? `${file} (${existsSync(file) ? 'present' : 'missing'})` : 'not found in configured search locations'}`);
   }
   console.log(`ffmpeg: ${local.ffmpeg}${local.ffmpeg === 'ffmpeg' ? ' (PATH lookup at runtime; not verified)' : ` (${existsSync(local.ffmpeg) ? 'present' : 'missing'})`}`);
-  if (!local.whisper) console.log('whisper-cli search: /opt/homebrew/bin, /usr/local/bin; override with SKIPPER_WHISPER_BIN');
+  console.log(`Local executable search: PATH${process.platform === 'win32' ? ' (.exe); edge-tts also in voice-venv/Scripts' : ', /opt/homebrew/bin, /usr/local/bin; edge-tts also in voice-venv/bin'}`);
   console.log('Local path overrides: SKIPPER_WHISPER_BIN, SKIPPER_WHISPER_MODEL, SKIPPER_EDGE_TTS');
   if (!active) console.log('Run skipper voice setup --region <region> for Azure, or configure the local tools.');
   process.exit(0);

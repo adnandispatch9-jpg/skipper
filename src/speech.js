@@ -4,7 +4,7 @@
 //  - local: no account at all. Whisper (whisper.cpp) recognizes on the Mac, and the neural voices
 //    are read with the edge-tts tool. Used automatically when those tools and the model are installed.
 
-import { promises as fs, existsSync } from 'node:fs';
+import { promises as fs, existsSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -34,14 +34,28 @@ const MAX_SPEAK_CHARS = 1200;
 
 const WHISPER_PROMPT = 'Assalomu alaykum. Hozir sessiyalar holati haqida gaplashamiz: qaysi biri ishlayapti, qaysi biri ruxsat soʻrayapti.';
 
+function localTool(name, env) {
+  const windows = process.platform === 'win32';
+  const pathKey = windows ? Object.keys(env).find((key) => key.toLowerCase() === 'path') : 'PATH';
+  const dirs = (env[pathKey] || '').split(path.delimiter).map((dir) => dir.replace(/^"|"$/g, '')).filter(Boolean);
+  if (!windows) dirs.push('/opt/homebrew/bin', '/usr/local/bin');
+  const binary = windows ? `${name}.exe` : name;
+  return dirs.map((dir) => path.join(dir, binary)).find((file) => {
+    try { return statSync(file).isFile(); } catch { return false; }
+  }) || null;
+}
+
 export function localVoicePaths(dataDir, env = process.env) {
-  const whisper = ['/opt/homebrew/bin/whisper-cli', '/usr/local/bin/whisper-cli'].find((p) => existsSync(p)) || null;
+  const whisper = localTool('whisper-cli', env);
+  const edgeVenv = process.platform === 'win32'
+    ? path.join(dataDir, 'voice-venv', 'Scripts', 'edge-tts.exe')
+    : path.join(dataDir, 'voice-venv', 'bin', 'edge-tts');
   return {
     whisper: env.SKIPPER_WHISPER_BIN || whisper,
     model: env.SKIPPER_WHISPER_MODEL || path.join(dataDir, 'models', 'ggml-large-v3-turbo-q5_0.bin'),
     detectModel: [path.join(dataDir, 'models', 'ggml-base.bin'), path.join(os.homedir(), '.cache', 'whisper.cpp', 'ggml-base.bin')].find((p) => existsSync(p)) || null,
-    edgeTts: env.SKIPPER_EDGE_TTS || path.join(dataDir, 'voice-venv', 'bin', 'edge-tts'),
-    ffmpeg: ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg'].find((p) => existsSync(p)) || 'ffmpeg',
+    edgeTts: env.SKIPPER_EDGE_TTS || (existsSync(edgeVenv) ? edgeVenv : localTool('edge-tts', env)) || edgeVenv,
+    ffmpeg: localTool('ffmpeg', env) || 'ffmpeg',
   };
 }
 

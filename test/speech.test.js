@@ -2,11 +2,57 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtempSync, statSync } from 'node:fs';
-import { detectLanguage, ssml, transcribe, synthesize, speechConfig, SpeechError, VOICES } from '../src/speech.js';
+import { mkdtempSync, statSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { detectLanguage, ssml, transcribe, synthesize, speechConfig, localVoicePaths, SpeechError, VOICES } from '../src/speech.js';
 import { writeConfig } from '../src/hooks.js';
 
 const config = { key: 'k'.repeat(32), region: 'westeurope', voices: VOICES };
+
+test('local voice discovers PATH tools and the platform venv layout', async (t) => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'skipper-local-paths-'));
+  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }));
+  const bin = path.join(root, 'tools with spaces');
+  const data = path.join(root, 'data');
+  const windows = process.platform === 'win32';
+  const suffix = windows ? '.exe' : '';
+  const venvBin = path.join(data, 'voice-venv', windows ? 'Scripts' : 'bin');
+  mkdirSync(bin, { recursive: true });
+  mkdirSync(venvBin, { recursive: true });
+  mkdirSync(path.join(data, 'models'), { recursive: true });
+  const whisper = path.join(bin, `whisper-cli${suffix}`);
+  const ffmpeg = path.join(bin, `ffmpeg${suffix}`);
+  const edge = path.join(venvBin, `edge-tts${suffix}`);
+  for (const file of [whisper, ffmpeg, edge, path.join(data, 'models', 'ggml-large-v3-turbo-q5_0.bin')]) {
+    writeFileSync(file, 'discovery fixture; never executed');
+  }
+  const env = { [windows ? 'Path' : 'PATH']: bin };
+  const paths = localVoicePaths(data, env);
+  assert.equal(paths.whisper, whisper);
+  assert.equal(paths.ffmpeg, ffmpeg);
+  assert.equal(paths.edgeTts, edge);
+  assert.equal((await speechConfig(data, env))?.provider, 'local');
+  const overridden = localVoicePaths(data, { ...env,
+    SKIPPER_WHISPER_BIN: '/explicit/whisper', SKIPPER_EDGE_TTS: '/explicit/tts',
+    SKIPPER_WHISPER_MODEL: '/explicit/model' });
+  assert.equal(overridden.whisper, '/explicit/whisper');
+  assert.equal(overridden.edgeTts, '/explicit/tts');
+  assert.equal(overridden.model, '/explicit/model');
+});
+
+test('edge-tts falls back to PATH and discovery skips directories', (t) => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'skipper-path-fallback-'));
+  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }));
+  const first = path.join(root, 'first');
+  const second = path.join(root, 'second');
+  const suffix = process.platform === 'win32' ? '.exe' : '';
+  mkdirSync(path.join(first, `whisper-cli${suffix}`), { recursive: true });
+  mkdirSync(second);
+  writeFileSync(path.join(second, `whisper-cli${suffix}`), 'fixture');
+  writeFileSync(path.join(second, `edge-tts${suffix}`), 'fixture');
+  const found = localVoicePaths(root, { PATH: `${first}${path.delimiter}${second}` });
+  assert.equal(found.whisper, path.join(second, `whisper-cli${suffix}`));
+  assert.equal(found.edgeTts, path.join(second, `edge-tts${suffix}`));
+});
 
 test('language guess picks Uzbek and English sentences apart', () => {
   assert.equal(detectLanguage('Hozir ikkita sessiya sizni kutyapti.'), 'uz-UZ');
