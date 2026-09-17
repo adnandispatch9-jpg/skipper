@@ -142,8 +142,20 @@ if (argv[0] === 'voice') {
     console.log('Cloud voice is off.');
     process.exit(0);
   }
-  const saved = (await readConfig(dataDir)).azureSpeech;
-  console.log(saved ? `Cloud voice: on (Azure, region ${saved.region})` : 'Cloud voice: off. Run skipper voice setup --region <region> to turn on Uzbek voice.');
+  const { speechConfig, localVoicePaths } = await import('../src/speech.js');
+  const config = await readConfig(dataDir);
+  const active = await speechConfig(dataDir);
+  const local = localVoicePaths(dataDir);
+  console.log(`Active voice engine: ${active?.provider || 'off'} (configuration only; not a live audio check)`);
+  if (active?.provider === 'azure') console.log(`Azure region: ${active.region}`);
+  if (config.localVoice === false) console.log('Local voice: disabled in config');
+  for (const [name, file] of [['whisper-cli', local.whisper], ['model', local.model], ['edge-tts', local.edgeTts], ['detection model (optional)', local.detectModel]]) {
+    console.log(`${name}: ${file ? `${file} (${existsSync(file) ? 'present' : 'missing'})` : 'not found in configured search locations'}`);
+  }
+  console.log(`ffmpeg: ${local.ffmpeg}${local.ffmpeg === 'ffmpeg' ? ' (PATH lookup at runtime; not verified)' : ` (${existsSync(local.ffmpeg) ? 'present' : 'missing'})`}`);
+  if (!local.whisper) console.log('whisper-cli search: /opt/homebrew/bin, /usr/local/bin; override with SKIPPER_WHISPER_BIN');
+  console.log('Local path overrides: SKIPPER_WHISPER_BIN, SKIPPER_WHISPER_MODEL, SKIPPER_EDGE_TTS');
+  if (!active) console.log('Run skipper voice setup --region <region> for Azure, or configure the local tools.');
   process.exit(0);
 }
 
