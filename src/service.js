@@ -60,8 +60,8 @@ function winQuote(arg) {
 
 // A Task Scheduler definition: start at logon, restart on failure, never time out.
 // conhost --headless runs node without opening a console window.
-export function windowsTaskXml({ nodePath, scriptPath, port, logDir, userId }) {
-  const args = ['--headless', nodePath, scriptPath, '--port', String(port), '--log-dir', logDir].map(winQuote).join(' ');
+export function windowsTaskXml({ nodePath, scriptPath, port, logDir, userId, host = null }) {
+  const args = ['--headless', nodePath, scriptPath, '--port', String(port), ...(host ? ['--host', host] : []), '--log-dir', logDir].map(winQuote).join(' ');
   return `<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo><Description>Skipper dashboard for Claude Code</Description></RegistrationInfo>
@@ -139,7 +139,7 @@ export async function installService({ nodePath, scriptPath, port = 4317, host =
     await fs.mkdir(logDir, { recursive: true });
     const userId = process.env.USERDOMAIN ? `${process.env.USERDOMAIN}\\${os.userInfo().username}` : os.userInfo().username;
     // schtasks reads task XML as UTF-16 with a byte order mark.
-    await fs.writeFile(file, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(windowsTaskXml({ nodePath, scriptPath, port, logDir, userId }), 'utf16le')]));
+    await fs.writeFile(file, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(windowsTaskXml({ nodePath, scriptPath, port, logDir, userId, host }), 'utf16le')]));
     try {
       run('schtasks', schtasksArgs('end'));
     } catch {}
