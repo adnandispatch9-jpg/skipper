@@ -4,7 +4,7 @@
 
 import { promises as fs } from 'node:fs';
 
-const TEXT_LIMIT = 8000;
+export const TEXT_LIMIT = 8000;
 const TAIL_BYTES = 4 * 1024 * 1024;
 
 const toMs = (timestamp) => {
@@ -12,7 +12,9 @@ const toMs = (timestamp) => {
   return Number.isFinite(ms) ? ms : null;
 };
 
-const clip = (text) => (text.length > TEXT_LIMIT ? `${text.slice(0, TEXT_LIMIT)}…` : text);
+// Long messages are cut so one huge paste cannot dominate a response. Callers are
+// told which ones were cut, so a reader can tell a short message from a shortened one.
+const clip = (text) => (text.length > TEXT_LIMIT ? { text: text.slice(0, TEXT_LIMIT), clipped: true } : { text, clipped: false });
 
 function userText(content) {
   if (typeof content === 'string') return content.startsWith('<') ? null : content;
@@ -21,7 +23,7 @@ function userText(content) {
   return parts.length ? parts.join('\n\n') : null;
 }
 
-export function conversationFromRecords(records, { limit = 60 } = {}) {
+export function buildConversation(records, { limit = 60 } = {}) {
   const items = [];
   const byResponse = new Map();
   for (const record of records) {
@@ -30,7 +32,7 @@ export function conversationFromRecords(records, { limit = 60 } = {}) {
     const message = record.message || {};
     if (record.type === 'user') {
       const text = userText(message.content);
-      if (text && text.trim()) items.push({ role: 'user', text: clip(text.trim()), at });
+      if (text && text.trim()) items.push({ role: 'user', ...clip(text.trim()), at });
       continue;
     }
     if (record.type !== 'assistant' || !Array.isArray(message.content)) continue;
@@ -39,9 +41,9 @@ export function conversationFromRecords(records, { limit = 60 } = {}) {
         const key = message.id || null;
         const existing = key && byResponse.get(key);
         if (existing && items[items.length - 1] === existing) {
-          existing.text = clip(`${existing.text}\n\n${block.text.trim()}`);
+          Object.assign(existing, clip(`${existing.text}\n\n${block.text.trim()}`));
         } else {
-          const item = { role: 'assistant', text: clip(block.text.trim()), at };
+          const item = { role: 'assistant', ...clip(block.text.trim()), at };
           items.push(item);
           if (key) byResponse.set(key, item);
         }
@@ -57,7 +59,11 @@ export function conversationFromRecords(records, { limit = 60 } = {}) {
       }
     }
   }
-  return items.slice(-limit);
+  return { messages: items.slice(-limit), dropped: Math.max(0, items.length - limit) };
+}
+
+export function conversationFromRecords(records, options) {
+  return buildConversation(records, options).messages;
 }
 
 export async function readConversation(file, { limit = 60, tailBytes = TAIL_BYTES } = {}) {
@@ -76,7 +82,8 @@ export async function readConversation(file, { limit = 60, tailBytes = TAIL_BYTE
         records.push(JSON.parse(line));
       } catch {}
     }
-    return { messages: conversationFromRecords(records, { limit }), truncated: start > 0 };
+    const { messages, dropped } = buildConversation(records, { limit });
+    return { messages, dropped, truncated: start > 0, textLimit: TEXT_LIMIT };
   } finally {
     await handle.close();
   }

@@ -21,7 +21,7 @@ class SessionScreen extends ConsumerStatefulWidget {
 class _SessionScreenState extends ConsumerState<SessionScreen> {
   late int _tab = widget.startOnConversation ? 1 : 0;
   SessionDetail? _detail;
-  List<ConversationItem> _conversation = const [];
+  Conversation _conversation = const Conversation();
   String? _error;
   int? _loadedFor;
   bool _sending = false;
@@ -49,7 +49,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       if (!mounted) return;
       setState(() {
         _detail = results[0] as SessionDetail;
-        _conversation = results[1] as List<ConversationItem>;
+        _conversation = results[1] as Conversation;
         _loadedFor = _detail!.summary.updatedAt;
         _error = null;
       });
@@ -127,7 +127,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                   onRefresh: _load,
                   child: switch (_tab) {
                     0 => _Overview(summary: summary, detail: _detail, now: live.now),
-                    1 => _ConversationList(items: _conversation, loading: _detail == null),
+                    1 => _ConversationList(conversation: _conversation, loading: _detail == null),
                     _ => _Notes(detail: _detail, sessionId: widget.sessionId, onChanged: _load),
                   },
                 ),
@@ -332,21 +332,38 @@ class _TodoRow extends StatelessWidget {
 }
 
 class _ConversationList extends StatelessWidget {
-  const _ConversationList({required this.items, required this.loading});
-  final List<ConversationItem> items;
+  const _ConversationList({required this.conversation, required this.loading});
+  final Conversation conversation;
   final bool loading;
+
+  String get _missingLabel {
+    if (conversation.truncated) return 'This session is too long to load whole. Older messages are on your Mac.';
+    final n = conversation.dropped;
+    return 'Showing the latest messages. $n older ${n == 1 ? 'item is' : 'items are'} not loaded.';
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final items = conversation.messages;
     if (loading) return const Center(child: CircularProgressIndicator());
     if (items.isEmpty) return ListView(children: [Padding(padding: const EdgeInsets.all(32), child: Text('No messages yet.', textAlign: TextAlign.center, style: TextStyle(color: c.muted)))]);
     final reversed = items.reversed.toList();
+    final notice = conversation.incomplete ? 1 : 0;
     return ListView.builder(
       reverse: true,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      itemCount: reversed.length,
+      itemCount: reversed.length + notice,
       itemBuilder: (context, i) {
+        if (notice == 1 && i == reversed.length) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Semantics(
+              label: _missingLabel,
+              child: Text(_missingLabel, textAlign: TextAlign.center, style: TextStyle(color: c.muted, fontSize: 12.5)),
+            ),
+          );
+        }
         final item = reversed[i];
         final child = switch (item.role) {
           'user' => Align(
@@ -355,7 +372,7 @@ class _ConversationList extends StatelessWidget {
                 constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.82),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(color: c.accentSoft, borderRadius: const BorderRadius.only(topLeft: Radius.circular(18), topRight: Radius.circular(18), bottomLeft: Radius.circular(18), bottomRight: Radius.circular(4))),
-                child: SelectableText(item.text, style: const TextStyle(height: 1.4)),
+                child: _ClippableText(text: item.text, clipped: item.clipped, style: const TextStyle(height: 1.4)),
               ),
             ),
           'tools' => Align(
@@ -366,10 +383,37 @@ class _ConversationList extends StatelessWidget {
                 child: Text('${item.names.join(', ')} · ${item.count} tool${item.count == 1 ? '' : 's'}', style: TextStyle(color: c.muted, fontSize: 12.5)),
               ),
             ),
-          _ => Align(alignment: Alignment.centerLeft, child: SelectableText(item.text, style: const TextStyle(height: 1.5))),
+          _ => Align(alignment: Alignment.centerLeft, child: _ClippableText(text: item.text, clipped: item.clipped, style: const TextStyle(height: 1.5))),
         };
         return Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: child);
       },
+    );
+  }
+}
+
+/// A message, with a visible marker when the server only sent part of it. A silent
+/// ellipsis reads as the end of the message, which is what people complained about.
+class _ClippableText extends StatelessWidget {
+  const _ClippableText({required this.text, required this.clipped, this.style});
+  final String text;
+  final bool clipped;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    if (!clipped) return SelectableText(text, style: style);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SelectableText(text, style: style),
+        const SizedBox(height: 6),
+        Semantics(
+          label: 'This message was shortened. The rest is on your Mac.',
+          child: Text('Message shortened — the rest is on your Mac', style: TextStyle(color: c.muted, fontSize: 12, fontStyle: FontStyle.italic)),
+        ),
+      ],
     );
   }
 }

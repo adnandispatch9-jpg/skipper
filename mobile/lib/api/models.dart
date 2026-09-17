@@ -163,12 +163,15 @@ class SessionDetail {
 
 /// One item in a session's readable conversation.
 class ConversationItem {
-  const ConversationItem({required this.role, this.text = '', this.names = const [], this.count = 0, this.at});
+  const ConversationItem({required this.role, this.text = '', this.names = const [], this.count = 0, this.at, this.clipped = false});
   final String role; // user | assistant | tools
   final String text;
   final List<String> names;
   final int count;
   final int? at;
+
+  /// The server shortened this message; what is here is not all of it.
+  final bool clipped;
 
   static ConversationItem? fromJson(Object? json) {
     if (json is! Map || json['role'] is! String) return null;
@@ -178,7 +181,24 @@ class ConversationItem {
       names: [for (final n in _as<List>(json['names']) ?? const []) if (n is String) n],
       count: _int(json['count']) ?? 0,
       at: _int(json['at']),
+      clipped: json['clipped'] == true,
     );
+  }
+}
+
+/// A session's conversation, with what the server left out.
+class Conversation {
+  const Conversation({this.messages = const [], this.dropped = 0, this.truncated = false});
+  final List<ConversationItem> messages;
+
+  /// Older items not returned because of the item limit.
+  final int dropped;
+
+  /// The transcript was too large to read whole, so the oldest part is missing.
+  final bool truncated;
+
+  bool get incomplete {
+    return dropped > 0 || truncated;
   }
 }
 

@@ -19,7 +19,7 @@ export const TOOLS = [
   },
   {
     name: 'get_conversation',
-    description: 'The recent readable conversation of one session: what the user said, what Claude replied, and which tools ran in between.',
+    description: 'The recent readable conversation of one session: what the user said, what Claude replied, and which tools ran in between. Only the tail is returned: an item with clipped=true was shortened, dropped counts older items left out, and tool runs are listed by name and count without their output. Say so rather than presenting a clipped message as the whole of it.',
     inputSchema: { type: 'object', properties: { session_id: { type: 'string' }, limit: { type: 'number', description: 'How many items (default 30, max 80).' } }, required: ['session_id'] },
   },
   {

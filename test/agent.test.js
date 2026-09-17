@@ -5,7 +5,7 @@ import path from 'node:path';
 import { rmSync, writeFileSync, chmodSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { eventsFromLine, promptWithHistory, agentArgs } from '../src/agent.js';
 import { handleRpc, createToolRunner, TOOLS } from '../src/mcp.js';
-import { conversationFromRecords } from '../src/conversation.js';
+import { conversationFromRecords, buildConversation, TEXT_LIMIT } from '../src/conversation.js';
 import { startServer } from '../src/server.js';
 import { writeDemo } from '../src/demo.js';
 
@@ -80,6 +80,36 @@ test('conversation keeps what was said and folds tool runs together', () => {
   assert.deepEqual(items[1].names, ['Grep', 'Read']);
   assert.equal(items[1].count, 3);
   assert.equal(items[2].text, 'Found it.\n\nFixed.');
+});
+
+test('a shortened message says so, and dropped items are counted', () => {
+  const at = (m) => new Date(Date.UTC(2026, 0, 1, 12, m)).toISOString();
+  const long = 'x'.repeat(TEXT_LIMIT + 500);
+  const { messages, dropped } = buildConversation([
+    { type: 'user', timestamp: at(1), message: { content: 'first' } },
+    { type: 'user', timestamp: at(2), message: { content: 'second' } },
+    { type: 'assistant', timestamp: at(3), message: { id: 'm1', content: [{ type: 'text', text: long }] } },
+  ], { limit: 2 });
+
+  assert.equal(dropped, 1);
+  assert.equal(messages.length, 2);
+  assert.equal(messages[0].text, 'second');
+  assert.equal(messages[0].clipped, false);
+  assert.equal(messages[1].clipped, true);
+  assert.equal(messages[1].text.length, TEXT_LIMIT);
+});
+
+test('a reply merged from several blocks reports clipping from the joined length', () => {
+  const at = (m) => new Date(Date.UTC(2026, 0, 1, 12, m)).toISOString();
+  const half = 'y'.repeat(TEXT_LIMIT - 100);
+  const { messages } = buildConversation([
+    { type: 'assistant', timestamp: at(1), message: { id: 'm1', content: [{ type: 'text', text: half }] } },
+    { type: 'assistant', timestamp: at(1), message: { id: 'm1', content: [{ type: 'text', text: half }] } },
+  ]);
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].clipped, true);
+  assert.equal(messages[0].text.length, TEXT_LIMIT);
 });
 
 async function readEvents(res) {

@@ -96,9 +96,13 @@ class SkipperClient {
     return SessionDetail.fromJson(json['session'] as Map<String, dynamic>);
   }
 
-  Future<List<ConversationItem>> conversation(String id, {int limit = 80}) async {
+  Future<Conversation> conversation(String id, {int limit = 80}) async {
     final json = await _getJson('/api/sessions/$id/conversation', {'limit': '$limit'});
-    return [for (final m in (json['messages'] as List? ?? const [])) ?ConversationItem.fromJson(m)];
+    return Conversation(
+      messages: [for (final m in (json['messages'] as List? ?? const [])) ?ConversationItem.fromJson(m)],
+      dropped: (json['dropped'] as num?)?.toInt() ?? 0,
+      truncated: json['truncated'] == true,
+    );
   }
 
   Future<List<ActivityItem>> activity({int limit = 100}) async {
